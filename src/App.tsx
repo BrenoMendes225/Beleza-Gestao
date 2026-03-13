@@ -907,7 +907,7 @@ const Clients = ({ onAdd }: { onAdd: () => void }) => {
 };
 
 const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
-  const [step, setStep] = useState(0); // 0: Hero, 1: Login, 2: Register, 3: Step1, 4: Step2, 5: Success
+  const [step, setStep] = useState(0); // 0-2: Slides, 3: Auth-Choice, 4: Login, 5: Register, 6: Personal, 7: Salon, 8: Hours, 9: Services
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -916,9 +916,25 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
   // Profile data
   const [profileData, setProfileData] = useState({
     full_name: '',
+    birth_date: '',
     salon_name: '',
-    salon_address: ''
+    salon_address: '',
+    business_hours: {
+      monday: { open: '09:00', close: '18:00', active: true },
+      tuesday: { open: '09:00', close: '18:00', active: true },
+      wednesday: { open: '09:00', close: '18:00', active: true },
+      thursday: { open: '09:00', close: '18:00', active: true },
+      friday: { open: '09:00', close: '18:00', active: true },
+      saturday: { open: '09:00', close: '13:00', active: true },
+      sunday: { open: '00:00', close: '00:00', active: false },
+    }
   });
+
+  const [initialServices, setInitialServices] = useState([
+    { name: 'Corte Feminino', price: '80', duration: '60', category: 'Cabelo' },
+    { name: 'Manicure', price: '35', duration: '40', category: 'Unhas' },
+    { name: 'Escova', price: '50', duration: '45', category: 'Cabelo' }
+  ]);
 
   const next = () => setStep(s => s + 1);
   const back = () => setStep(s => Math.max(0, s - 1));
@@ -939,278 +955,415 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
       setError(error.message);
-    } else {
-      setStep(3); // Go to info steps after sign up
+    } else if (data.user) {
+      setStep(6); // Go to info steps after sign up
     }
     setLoading(false);
   };
 
-  const saveProfile = async () => {
+  const finishOnboarding = async () => {
     setLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: session.user.id,
-          ...profileData,
-          updated_at: new Date().toISOString()
-        });
-      if (error) alert(error.message);
-      else onComplete();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      // 1. Save Profile
+      const { error: pError } = await supabase.from('profiles').upsert({
+        id: session.user.id,
+        ...profileData,
+        onboarding_completed: true,
+        updated_at: new Date().toISOString()
+      });
+      if (pError) throw pError;
+
+      // 2. Save Initial Services
+      const servicesToInsert = initialServices.map(s => ({
+        user_id: session.user.id,
+        name: s.name,
+        price: parseFloat(s.price),
+        duration: parseInt(s.duration),
+        category: s.category
+      }));
+      const { error: sError } = await supabase.from('services').insert(servicesToInsert);
+      if (sError) throw sError;
+
+      onComplete();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  if (step === 0) {
+  // --- Slides ---
+  const slides = [
+    {
+      title: "Gestão Completa do seu Espaço",
+      desc: "Organize sua equipe, estoque e agenda de forma intuitiva. Ganhe tempo para o que realmente importa.",
+      image: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800",
+      icon: <LayoutDashboard size={40} />
+    },
+    {
+      title: "Agendamento Inteligente",
+      desc: "Evite furos na agenda e conflitos de horários. Suas clientes vão amar a praticidade.",
+      image: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&q=80&w=800",
+      icon: <Calendar size={40} />
+    },
+    {
+      title: "Controle Financeiro Real",
+      desc: "Saiba exatamente quanto seu salão fatura e quais serviços são os mais lucrativos.",
+      image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=800",
+      icon: <TrendingUp size={40} />
+    }
+  ];
+
+  if (step < 3) {
     return (
-      <div className="min-h-screen bg-background-light flex flex-col p-6">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="bg-primary p-1.5 rounded-lg text-white"><Scissors size={20} /></div>
-          <h2 className="text-lg font-extrabold">Beleza & Gestão</h2>
-          <button onClick={next} className="ml-auto text-primary font-bold text-sm">Pular</button>
-        </div>
-        <div className="flex-1 flex flex-col">
-          <div className="relative rounded-3xl overflow-hidden min-h-[400px] mb-8 shadow-2xl border-4 border-white">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAypwri0pjTAuaQ6QEDDUgIxlgoXw-ReDYymt4mH2EB_1cbsMNPeyDQes6iJxxrUYkZavacLCeZpa6WyPvqKZbQIFyHCUY6TX9bWesDlWw3oBJocp4bwH-Cj-w5cvvFIvNO4QYlWqciyNTYrJ1BeEaWo9Cb1BQCd5LvIjhmF9os2TKU9Bt6rg_XKV6HJCOLRFeQQchG2Teb-rITDc8dJWYd7EDSlTT1dF58UbKQkV9kqdfNHwiWoCcbUE2_YkzwpSABPeziZ2l3J3U" className="absolute inset-0 w-full h-full object-cover" alt="Salon" referrerPolicy="no-referrer" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-8">
-              <div className="flex gap-2 mb-4">
-                <div className="h-1.5 w-10 rounded-full bg-primary"></div>
-                <div className="h-1.5 w-1.5 rounded-full bg-white/40"></div>
-                <div className="h-1.5 w-1.5 rounded-full bg-white/40"></div>
+      <div className="min-h-screen bg-white flex flex-col overflow-hidden">
+        <div className="flex-1 relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -100 }}
+              className="absolute inset-0 flex flex-col"
+            >
+              <div className="h-2/3 relative">
+                <img src={slides[step].image} className="w-full h-full object-cover" alt="Presentation" />
+                <div className="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-transparent"></div>
               </div>
-            </div>
+              <div className="flex-1 p-8 text-center flex flex-col items-center justify-center -mt-20 relative z-10 bg-white rounded-t-[40px]">
+                <div className="size-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-primary/5">
+                  {slides[step].icon}
+                </div>
+                <h1 className="text-3xl font-extrabold text-slate-900 mb-4">{slides[step].title}</h1>
+                <p className="text-slate-500 max-w-sm leading-relaxed">{slides[step].desc}</p>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        <div className="p-8 space-y-6">
+          <div className="flex justify-center gap-2">
+            {slides.map((_, i) => (
+              <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${step === i ? 'w-8 bg-primary' : 'w-2 bg-slate-200'}`}></div>
+            ))}
           </div>
-          <div className="text-center space-y-4 mb-8">
-            <span className="inline-block bg-rose-100 text-primary px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">Destaque</span>
-            <h1 className="text-3xl font-extrabold tracking-tight">Gestão Completa do seu Espaço</h1>
-            <p className="text-slate-600 text-sm px-4">Organize sua equipe, estoque e agenda de forma intuitiva. Ganhe tempo para o que realmente importa: a beleza das suas clientes.</p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 mb-8">
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-2">
-              <div className="text-primary"><Calendar size={20} /></div>
-              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Agendamento</span>
-            </div>
-            <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100 flex flex-col items-center gap-2">
-              <div className="text-primary"><CreditCard size={20} /></div>
-              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Financeiro</span>
-            </div>
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-2">
-              <div className="text-primary"><Users size={20} /></div>
-              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Equipe</span>
-            </div>
-          </div>
-
-          <button onClick={next} className="w-full bg-primary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 mb-4">
-            Próximo <ArrowRight size={20} />
+          <button onClick={next} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 text-lg">
+            Continuar <ArrowRight size={20} />
           </button>
-          
-          <p className="text-center text-xs text-slate-500">
-            Já possui uma conta? <button onClick={() => setStep(1)} className="text-primary font-bold">Entrar</button>
-          </p>
+          <button onClick={() => setStep(3)} className="w-full text-slate-400 font-bold py-2">Pular</button>
         </div>
       </div>
     );
   }
 
-  if (step === 1) {
+  if (step === 3) { // Auth Choice
     return (
-      <div className="min-h-screen bg-background-light flex flex-col">
-        <div className="relative h-64 overflow-hidden">
-          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRakmA1k2ekRowepKuM-0xzuJfSLmw0wAyVy0CRr996Sf3l97sW0O6ktxs0aVHSMkeMrGkE0qaEbzg0Jc-OkOEifq9Au0odTu1kXGCyUJgJQ67HV1Nsp-xuuknxB9YUjdWWDOXgjB-1D0Pf1_XCXnUGiZfyU5U6BhJeCFCeaSrkp80k3TwGa41z08_Z7a0vPARsuIhZpKEb864vHVOgT-mUPEfOb6ZRUQOEsltGLE1wXBXRrjk1D2_HcPEUvi6CcdB9oOzkoK7oTY" className="w-full h-full object-cover" alt="Salon" referrerPolicy="no-referrer" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background-light to-transparent"></div>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
+        <div className="size-20 bg-primary rounded-3xl flex items-center justify-center text-white mb-8 shadow-2xl shadow-primary/30 rotate-6">
+          <Scissors size={40} />
         </div>
-        <form onSubmit={handleLogin} className="px-8 pb-10 -mt-12 relative z-10 flex-1 flex flex-col">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center shadow-lg text-white">
-              <Scissors size={32} />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-center mb-2">Entrar</h1>
-          <p className="text-slate-600 text-center mb-8">Bem-vinda de volta ao Beleza & Gestão.</p>
-          
-          {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs rounded-xl border border-red-100">{error}</div>}
-          
-          <div className="space-y-4 mb-8">
+        <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Beleza & Gestão</h1>
+        <p className="text-slate-500 mb-12 max-w-xs">O parceiro ideal para o crescimento do seu negócio.</p>
+        
+        <div className="w-full space-y-4">
+          <button onClick={() => setStep(5)} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg">Começar Agora</button>
+          <button onClick={() => setStep(4)} className="w-full bg-white text-slate-700 font-bold h-16 rounded-2xl border border-slate-200 shadow-sm text-lg">Já tenho conta</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 4 || step === 5) { // Login / Register
+    const isLogin = step === 4;
+    return (
+      <div className="min-h-screen bg-white flex flex-col p-8">
+        <button onClick={() => setStep(3)} className="size-12 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-600 mb-8 border border-slate-100"><ArrowLeft size={24} /></button>
+        <h1 className="text-4xl font-extrabold text-slate-900 mb-2">{isLogin ? 'Bem-vinda!' : 'Crie sua conta'}</h1>
+        <p className="text-slate-500 mb-10">{isLogin ? 'Falta pouco para acessar sua agenda.' : 'Preencha os dados básicos para começar.'}</p>
+
+        {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 flex items-center gap-3 text-sm font-medium"><LogOut size={16} /> {error}</div>}
+
+        <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase ml-1">E-mail</label>
             <input 
               type="email" 
               placeholder="seu@email.com" 
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary" 
-              required
+              onChange={e => setEmail(e.target.value)}
+              className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:border-primary focus:bg-white transition-all shadow-inner"
+              required 
             />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase ml-1">Senha</label>
             <input 
               type="password" 
               placeholder="••••••••" 
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary" 
-              required
+              onChange={e => setPassword(e.target.value)}
+              className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:border-primary focus:bg-white transition-all shadow-inner"
+              required 
             />
           </div>
-          <div className="space-y-3">
-            <button type="submit" disabled={loading} className="w-full bg-primary text-white font-bold h-12 rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50">
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
-            <button type="button" onClick={() => setStep(2)} className="w-full bg-slate-100 text-slate-900 font-bold h-12 rounded-xl border border-slate-200">
-              Criar Nova Conta
-            </button>
-            <button type="button" onClick={() => setStep(0)} className="w-full text-slate-400 text-sm font-medium">Voltar</button>
-          </div>
-          <div className="mt-auto pt-8 text-center text-[10px] text-slate-400">
-            Ao continuar, você concorda com nossos <br/>
-            <span className="underline cursor-pointer">Termos de Serviço</span> e <span className="underline cursor-pointer">Política de Privacidade</span>.
-          </div>
+          <button type="submit" disabled={loading} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-4 disabled:opacity-50">
+            {loading ? 'Processando...' : (isLogin ? 'Entrar' : 'Cadastrar')}
+          </button>
         </form>
-      </div>
-    );
-  }
-
-  if (step === 2) {
-    return (
-      <div className="min-h-screen bg-background-light flex flex-col">
-        <div className="relative h-64 overflow-hidden">
-          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRakmA1k2ekRowepKuM-0xzuJfSLmw0wAyVy0CRr996Sf3l97sW0O6ktxs0aVHSMkeMrGkE0qaEbzg0Jc-OkOEifq9Au0odTu1kXGCyUJgJQ67HV1Nsp-xuuknxB9YUjdWWDOXgjB-1D0Pf1_XCXnUGiZfyU5U6BhJeCFCeaSrkp80k3TwGa41z08_Z7a0vPARsuIhZpKEb864vHVOgT-mUPEfOb6ZRUQOEsltGLE1wXBXRrjk1D2_HcPEUvi6CcdB9oOzkoK7oTY" className="w-full h-full object-cover" alt="Salon" referrerPolicy="no-referrer" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background-light to-transparent"></div>
-        </div>
-        <form onSubmit={handleRegister} className="px-8 pb-10 -mt-12 relative z-10 flex-1 flex flex-col">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center shadow-lg text-white">
-              <Scissors size={32} />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-center mb-2">Criar Conta</h1>
-          <p className="text-slate-600 text-center mb-8">Comece sua jornada hoje mesmo.</p>
-
-          {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs rounded-xl border border-red-100">{error}</div>}
-
-          <div className="space-y-4 mb-8">
-            <input 
-              type="email" 
-              placeholder="seu@email.com" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary" 
-              required
-            />
-            <input 
-              type="password" 
-              placeholder="•••••••• (mín. 6 caracteres)" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary" 
-              required
-            />
-          </div>
-          <div className="space-y-3">
-            <button type="submit" disabled={loading} className="w-full bg-primary text-white font-bold h-12 rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50">
-              {loading ? 'Criando...' : 'Criar Conta'}
-            </button>
-            <button type="button" onClick={() => setStep(1)} className="w-full bg-slate-100 text-slate-900 font-bold h-12 rounded-xl border border-slate-200">
-              Já tenho uma conta
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
-  if (step === 3) {
-    return (
-      <div className="min-h-screen bg-background-light flex flex-col p-6">
-        <button onClick={() => setStep(2)} className="size-10 flex items-center justify-center rounded-full hover:bg-slate-200 mb-4"><ArrowLeft size={24} /></button>
-        <div className="flex justify-between items-end mb-2">
-          <h2 className="text-base font-bold">Configuração Inicial</h2>
-          <span className="text-slate-500 text-xs">Passo 1 de 3</span>
-        </div>
-        <div className="h-2 w-full bg-primary/10 rounded-full mb-8 overflow-hidden">
-          <div className="h-full w-1/3 bg-primary rounded-full"></div>
-        </div>
-        <h1 className="text-3xl font-extrabold mb-2">Seja bem-vinda!</h1>
-        <p className="text-slate-600 mb-8">Vamos começar com seu nome profissional.</p>
-        <div className="space-y-6 flex-1">
-          <div>
-            <label className="block text-sm font-bold mb-2">Seu Nome Completo</label>
-            <div className="relative">
-              <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input 
-                type="text" 
-                placeholder="ex: Juliana Moraes" 
-                className="w-full h-14 pl-12 pr-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary"
-                value={profileData.full_name}
-                onChange={e => setProfileData({...profileData, full_name: e.target.value})}
-              />
-            </div>
-          </div>
-        </div>
-        <button onClick={next} className="w-full bg-primary text-white font-bold h-14 rounded-xl shadow-lg mt-8">Continuar</button>
-      </div>
-    );
-  }
-
-  if (step === 4) {
-    return (
-      <div className="min-h-screen bg-background-light flex flex-col p-6">
-        <button onClick={back} className="size-10 flex items-center justify-center rounded-full hover:bg-slate-200 mb-4"><ArrowLeft size={24} /></button>
-        <div className="flex justify-between items-end mb-2">
-          <h2 className="text-base font-bold">Informações do Salão</h2>
-          <span className="text-slate-500 text-xs">Passo 2 de 3</span>
-        </div>
-        <div className="h-2 w-full bg-primary/10 rounded-full mb-8 overflow-hidden">
-          <div className="h-full w-2/3 bg-primary rounded-full"></div>
-        </div>
-        <h1 className="text-3xl font-extrabold mb-2">Sobre o seu salão</h1>
-        <p className="text-slate-600 mb-8">Forneça os detalhes que seus clientes verão ao agendar.</p>
-        <div className="space-y-6 flex-1">
-          <div>
-            <label className="block text-sm font-bold mb-2">Nome do Salão</label>
-            <div className="relative">
-              <Home className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input 
-                type="text" 
-                placeholder="ex: Blossom Hair & Spa" 
-                className="w-full h-14 pl-12 pr-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary"
-                value={profileData.salon_name}
-                onChange={e => setProfileData({...profileData, salon_name: e.target.value})}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-2">Endereço / Cidade</label>
-            <div className="relative">
-              <Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input 
-                type="text" 
-                placeholder="ex: Rua das Flores, 123" 
-                className="w-full h-14 pl-12 pr-4 rounded-xl border border-slate-200 bg-white outline-none focus:border-primary"
-                value={profileData.salon_address}
-                onChange={e => setProfileData({...profileData, salon_address: e.target.value})}
-              />
-            </div>
-          </div>
-        </div>
-        <button onClick={next} className="w-full bg-primary text-white font-bold h-14 rounded-xl shadow-lg mt-8">Continuar</button>
-      </div>
-    );
-  }
-
-  if (step === 5) {
-    return (
-      <div className="min-h-screen bg-background-light flex flex-col p-6 items-center justify-center text-center">
-        <div className="size-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
-          <Sparkles size={40} />
-        </div>
-        <h1 className="text-3xl font-extrabold mb-4">Tudo Pronto!</h1>
-        <p className="text-slate-600 mb-12">Seu salão foi configurado com sucesso. Agora você pode começar a gerenciar seus agendamentos.</p>
+        
         <button 
-          onClick={saveProfile} 
-          disabled={loading}
-          className="w-full bg-primary text-white font-bold h-14 rounded-xl shadow-lg disabled:opacity-50"
+          onClick={() => setStep(isLogin ? 5 : 4)} 
+          className="mt-6 text-slate-500 font-bold tracking-tight"
         >
-          {loading ? 'Salvando...' : 'Acessar Dashboard'}
+          {isLogin ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Entre aqui'}
         </button>
+      </div>
+    );
+  }
+
+  if (step === 6) { // Personal Info
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
+        <div className="bg-white p-8 rounded-[40px] shadow-sm flex-1 flex flex-col">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 1 de 4</h2>
+            <div className="flex gap-1">
+              {[1,0,0,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+            </div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Sobre Você</h1>
+          <p className="text-slate-500 mb-10 leading-relaxed">Conte-nos um pouco sobre a profissional por trás do sucesso.</p>
+          
+          <div className="space-y-6 flex-1">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase">Seu Nome Completo</label>
+              <div className="relative">
+                <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="ex: Juliana Moraes" 
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  value={profileData.full_name}
+                  onChange={e => setProfileData({...profileData, full_name: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase">Data de Nascimento</label>
+              <div className="relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type="date" 
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  value={profileData.birth_date}
+                  onChange={e => setProfileData({...profileData, birth_date: e.target.value})}
+                />
+              </div>
+            </div>
+          </div>
+          <button onClick={next} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg mt-8 text-lg">Continuar</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 7) { // Salon Info
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
+        <div className="bg-white p-8 rounded-[40px] shadow-sm flex-1 flex flex-col">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 2 de 4</h2>
+            <div className="flex gap-1">
+              {[1,1,0,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+            </div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Seu Negócio</h1>
+          <p className="text-slate-500 mb-10 leading-relaxed">Como os clientes encontrarão e identificarão seu espaço?</p>
+          
+          <div className="space-y-6 flex-1">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase">Nome do Salão / Estúdio</label>
+              <div className="relative">
+                <Home className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="ex: Blossom Hair & Spa" 
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  value={profileData.salon_name}
+                  onChange={e => setProfileData({...profileData, salon_name: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase">Endereço Completo</label>
+              <div className="relative">
+                <Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="Rua, Número, Bairro, Cidade" 
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  value={profileData.salon_address}
+                  onChange={e => setProfileData({...profileData, salon_address: e.target.value})}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-4">
+            <button onClick={back} className="px-6 bg-slate-50 text-slate-400 font-bold rounded-2xl border border-slate-100">Voltar</button>
+            <button onClick={next} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg">Próximo</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 8) { // Business Hours
+    const days = [
+      { id: 'monday', label: 'Segunda' },
+      { id: 'tuesday', label: 'Terça' },
+      { id: 'wednesday', label: 'Quarta' },
+      { id: 'thursday', label: 'Quinta' },
+      { id: 'friday', label: 'Sexta' },
+      { id: 'saturday', label: 'Sábado' },
+      { id: 'sunday', label: 'Domingo' },
+    ];
+
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
+        <div className="bg-white p-6 rounded-[40px] shadow-sm flex-1 flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 3 de 4</h2>
+            <div className="flex gap-1">
+              {[1,1,1,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+            </div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Horários</h1>
+          <p className="text-slate-500 mb-6 leading-relaxed">Quando você está disponível para atender?</p>
+          
+          <div className="space-y-3 flex-1 overflow-y-auto pr-2 no-scrollbar">
+            {days.map(day => {
+              const d = (profileData.business_hours as any)[day.id];
+              return (
+                <div key={day.id} className={`p-4 rounded-2xl border transition-all ${d.active ? 'bg-white border-primary/20 ring-1 ring-primary/5 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-slate-700">{day.label}</span>
+                    <button 
+                      onClick={() => setProfileData({
+                        ...profileData,
+                        business_hours: {
+                          ...profileData.business_hours,
+                          [day.id]: { ...d, active: !d.active }
+                        }
+                      })}
+                      className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${d.active ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-400'}`}
+                    >
+                      {d.active ? 'Aberto' : 'Fechado'}
+                    </button>
+                  </div>
+                  {d.active && (
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="time" 
+                        className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none focus:border-primary"
+                        value={d.open}
+                        onChange={e => setProfileData({
+                          ...profileData,
+                          business_hours: { ...profileData.business_hours, [day.id]: { ...d, open: e.target.value } }
+                        })}
+                      />
+                      <span className="text-slate-400 text-xs font-bold">às</span>
+                      <input 
+                        type="time" 
+                        className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none focus:border-primary"
+                        value={d.close}
+                        onChange={e => setProfileData({
+                          ...profileData,
+                          business_hours: { ...profileData.business_hours, [day.id]: { ...d, close: e.target.value } }
+                        })}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-4 mt-6">
+            <button onClick={back} className="px-6 bg-slate-50 text-slate-400 font-bold rounded-2xl border border-slate-100">Voltar</button>
+            <button onClick={next} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg">Próximo</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 9) { // Initial Services
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
+        <div className="bg-white p-8 rounded-[40px] shadow-sm flex-1 flex flex-col">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 4 de 4</h2>
+            <div className="flex gap-1">
+              {[1,1,1,1].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+            </div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Serviços</h1>
+          <p className="text-slate-500 mb-10 leading-relaxed">Para começar com o pé direito, adicione seus 3 principais serviços.</p>
+          
+          <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+            {initialServices.map((service, idx) => (
+              <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-3">
+                <input 
+                  type="text" 
+                  placeholder="Nome do serviço" 
+                  className="bg-transparent font-bold text-slate-700 outline-none border-b border-slate-200 pb-1"
+                  value={service.name}
+                  onChange={e => {
+                    const newS = [...initialServices];
+                    newS[idx].name = e.target.value;
+                    setInitialServices(newS);
+                  }}
+                />
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Preço (R$)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-white border border-slate-100 rounded-lg px-2 py-1 text-sm outline-none"
+                      value={service.price}
+                      onChange={e => {
+                        const newS = [...initialServices];
+                        newS[idx].price = e.target.value;
+                        setInitialServices(newS);
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Duração (min)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-white border border-slate-100 rounded-lg px-2 py-1 text-sm outline-none"
+                      value={service.duration}
+                      onChange={e => {
+                        const newS = [...initialServices];
+                        newS[idx].duration = e.target.value;
+                        setInitialServices(newS);
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button 
+            onClick={finishOnboarding} 
+            disabled={loading}
+            className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg mt-8 text-xl shadow-primary/20 disabled:opacity-50"
+          >
+            {loading ? 'Preparando seu Espaço...' : 'Finalizar e Começar'}
+          </button>
+        </div>
       </div>
     );
   }
@@ -1223,6 +1376,7 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'appointment' | 'client' | 'service'>('appointment');
   const [modalShowTabs, setModalShowTabs] = useState(true);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const openModal = (type: 'appointment' | 'client' | 'service' = 'appointment', showTabs: boolean = true) => {
@@ -1246,9 +1400,22 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => setOnboardingCompleted(data?.onboarding_completed ?? false));
+    } else {
+      setOnboardingCompleted(null);
+    }
+  }, [user, refreshKey]);
+
   const refreshData = () => setRefreshKey(prev => prev + 1);
 
-  if (loading) {
+  if (loading || (user && onboardingCompleted === null)) {
     return (
       <div className="min-h-screen bg-background-light flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -1256,8 +1423,8 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return <Onboarding onComplete={() => {}} />;
+  if (!user || !onboardingCompleted) {
+    return <Onboarding onComplete={() => setOnboardingCompleted(true)} />;
   }
 
   return (
