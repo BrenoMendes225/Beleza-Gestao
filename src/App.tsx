@@ -1206,6 +1206,32 @@ const SettingsScreen = ({
             </div>
           </div>
 
+          {/* Booking Link */}
+          <div className="p-4 rounded-2xl bg-primary/5 dark:bg-primary/10 border border-primary/10 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="size-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary shadow-sm"><Share2 size={18} /></div>
+              <div>
+                <p className="text-[10px] font-bold text-primary/80 uppercase tracking-widest">Agendamento Online</p>
+                <p className="font-bold text-slate-700 dark:text-white text-sm">Link para Clientes Agendarem</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">Compartilhe esse link com suas clientes pelo WhatsApp ou Instagram. Elas poderão agendar sem precisar de conta.</p>
+            <button
+              onClick={() => {
+                const link = `${window.location.origin}${window.location.pathname}?book=${user.id}`;
+                if (navigator.share) {
+                  navigator.share({ title: `Agende no ${profile?.salon_name || 'salão'}`, url: link });
+                } else {
+                  navigator.clipboard.writeText(link);
+                  alert('Link copiado! Cole no WhatsApp ou Instagram.');
+                }
+              }}
+              className="w-full bg-primary text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95"
+            >
+              <Share2 size={16} /> Compartilhar Link de Agendamento
+            </button>
+          </div>
+
           <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-background-dark transition-colors">
             <div className="flex items-center gap-3">
               <div className="size-10 bg-white dark:bg-surface-dark rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-sm">
@@ -2005,7 +2031,397 @@ const Onboarding = ({ onComplete, isDarkMode }: { onComplete: () => void, isDark
   }
 };
 
+// ---- Helper for time slot generation ----
+const DAY_MAP: Record<number, string> = {
+  0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
+  4: 'thursday', 5: 'friday', 6: 'saturday'
+};
+
+function generateAvailableTimeSlots(
+  dateStr: string,
+  serviceDurationMins: number,
+  businessHours: any,
+  existingAppointments: { time: string; duration: number }[]
+): string[] {
+  const date = new Date(dateStr + 'T12:00:00'); // avoid TZ day shift
+  const dayKey = DAY_MAP[date.getDay()];
+  const dayConfig = businessHours?.[dayKey];
+
+  if (!dayConfig || !dayConfig.active) return [];
+
+  const [openH, openM] = dayConfig.open.split(':').map(Number);
+  const [closeH, closeM] = dayConfig.close.split(':').map(Number);
+
+  const openTotal = openH * 60 + openM;
+  const closeTotal = closeH * 60 + closeM;
+
+  const slots: string[] = [];
+  for (let t = openTotal; t + serviceDurationMins <= closeTotal; t += 30) {
+    const slotEnd = t + serviceDurationMins;
+    const hh = String(Math.floor(t / 60)).padStart(2, '0');
+    const mm = String(t % 60).padStart(2, '0');
+    const slotLabel = `${hh}:${mm}`;
+
+    // Check conflicts: block if any existing appointment overlaps
+    const conflict = existingAppointments.some(apt => {
+      const [ah, am] = apt.time.split(':').map(Number);
+      const aptStart = ah * 60 + am;
+      const aptEnd = aptStart + (apt.duration || 60);
+      return t < aptEnd && slotEnd > aptStart;
+    });
+
+    if (!conflict) slots.push(slotLabel);
+  }
+  return slots;
+}
+
+// ---- PublicBooking Component ----
+const PublicBooking = ({ professionalId }: { professionalId: string }) => {
+  const [step, setStep] = useState<'service' | 'datetime' | 'info' | 'success'>('service');
+  const [profile, setProfile] = useState<any>(null);
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Pix');
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPublicData = async () => {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('full_name, salon_name, business_hours')
+        .eq('id', professionalId)
+        .single();
+      setProfile(prof);
+
+      const { data: svcs } = await supabase
+        .from('services')
+        .select('*')
+        .eq('user_id', professionalId)
+        .order('category');
+      setServices(svcs || []);
+      setInitialLoading(false);
+    };
+    fetchPublicData();
+  }, [professionalId]);
+
+  useEffect(() => {
+    if (!selectedDate || !selectedService) return;
+    const fetchSlots = async () => {
+      setLoadingSlots(true);
+      setSelectedTime('');
+      const { data: apts } = await supabase
+        .from('appointments')
+        .select('time, service:service_id(duration)')
+        .eq('user_id', professionalId)
+        .eq('date', selectedDate)
+        .in('status', ['pending', 'confirmed', 'completed']);
+
+      const existing = (apts || []).map((a: any) => ({
+        time: a.time,
+        duration: a.service?.duration || 60
+      }));
+
+      const slots = generateAvailableTimeSlots(
+        selectedDate,
+        selectedService.duration,
+        profile?.business_hours,
+        existing
+      );
+      setAvailableSlots(slots);
+      setLoadingSlots(false);
+    };
+    fetchSlots();
+  }, [selectedDate, selectedService, profile]);
+
+  const handleConfirmBooking = async () => {
+    if (!clientName || !selectedService || !selectedDate || !selectedTime) return;
+    setLoading(true);
+    try {
+      // Upsert client
+      let clientId: string | null = null;
+      if (clientPhone) {
+        const { data: existingClient } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('phone', clientPhone)
+          .eq('user_id', professionalId)
+          .single();
+        if (existingClient) {
+          clientId = existingClient.id;
+        }
+      }
+      if (!clientId) {
+        const { data: newClient } = await supabase
+          .from('clients')
+          .insert({ name: clientName, phone: clientPhone, user_id: professionalId, status: 'active' })
+          .select()
+          .single();
+        clientId = newClient?.id;
+      }
+
+      if (!clientId) throw new Error('Não foi possível registrar a cliente.');
+
+      // Insert appointment
+      const { error: aptErr } = await supabase.from('appointments').insert({
+        user_id: professionalId,
+        client_id: clientId,
+        service_id: selectedService.id,
+        date: selectedDate,
+        time: selectedTime,
+        status: 'pending',
+        payment_method: paymentMethod,
+      });
+      if (aptErr) throw aptErr;
+
+      // Create notification for professional
+      await supabase.from('notifications').insert({
+        user_id: professionalId,
+        title: '🌸 Novo Agendamento pelo Link!',
+        message: `${clientName} agendou "${selectedService.name}" para ${selectedDate} às ${selectedTime}.`,
+        read: false,
+      });
+
+      setStep('success');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao confirmar agendamento. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  if (initialLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-white to-rose-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center text-center p-8">
+        <div>
+          <Scissors size={48} className="text-slate-200 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-500">Página de agendamento não encontrada.</h2>
+          <p className="text-slate-400 mt-2 text-sm">Verifique o link com o salão.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'success') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex flex-col items-center justify-center p-8 text-center">
+        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+          <div className="size-28 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-emerald-500/30">
+            <CheckCircle size={52} />
+          </div>
+        </motion.div>
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-3">Agendado com Sucesso!</h1>
+        <p className="text-slate-500 max-w-xs leading-relaxed mb-2">
+          Seu horário está confirmado. O salão receberá sua solicitação.
+        </p>
+        <div className="mt-6 p-6 bg-white rounded-3xl shadow-lg border border-slate-100 text-left w-full max-w-sm">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Resumo</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Serviço</span><span className="font-bold text-slate-800">{selectedService?.name}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Data</span><span className="font-bold text-slate-800">{selectedDate}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Horário</span><span className="font-bold text-slate-800">{selectedTime}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Pagamento</span><span className="font-bold text-slate-800">{paymentMethod}</span></div>
+          </div>
+        </div>
+        <p className="text-emerald-600 font-bold mt-8 text-sm">💖 {profile.salon_name || profile.full_name}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50/30 pb-16">
+      {/* Header */}
+      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-100 px-6 py-4 flex items-center gap-3">
+        <div className="size-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-md shadow-primary/30">
+          <Scissors size={20} />
+        </div>
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Agendamento Online</p>
+          <h1 className="text-base font-black text-slate-900 leading-tight">{profile.salon_name || profile.full_name}</h1>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 pt-8 space-y-8">
+
+        {/* Step 1: Service */}
+        <div>
+          <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+            <span className="size-7 rounded-full bg-primary text-white text-xs flex items-center justify-center font-black">1</span>
+            Escolha o Procedimento
+          </h2>
+          <div className="grid grid-cols-1 gap-3">
+            {services.map(s => (
+              <button
+                key={s.id}
+                onClick={() => { setSelectedService(s); setStep('datetime'); }}
+                className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left ${
+                  selectedService?.id === s.id
+                    ? 'border-primary bg-primary/5 shadow-sm shadow-primary/10'
+                    : 'border-slate-100 bg-white hover:border-primary/30 hover:bg-slate-50'
+                }`}
+              >
+                <div>
+                  <p className="font-bold text-slate-900">{s.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{s.duration} min · {s.category}</p>
+                </div>
+                <div className="text-right shrink-0 ml-4">
+                  <p className="font-black text-primary text-lg">R$ {s.price?.toFixed(2)}</p>
+                  {selectedService?.id === s.id && <CheckCircle size={16} className="text-primary ml-auto mt-1" />}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Step 2: Date & Time */}
+        {selectedService && (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+            <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+              <span className="size-7 rounded-full bg-primary text-white text-xs flex items-center justify-center font-black">2</span>
+              Escolha a Data
+            </h2>
+            <input
+              type="date"
+              min={today}
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="w-full h-14 px-5 rounded-2xl bg-white border-2 border-slate-100 focus:border-primary outline-none transition-all text-slate-800 font-bold mb-4"
+            />
+
+            {selectedDate && (
+              <div>
+                <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                  <span className="size-7 rounded-full bg-primary text-white text-xs flex items-center justify-center font-black">3</span>
+                  Escolha o Horário
+                </h2>
+                {loadingSlots ? (
+                  <div className="text-center py-8 text-slate-400 text-sm">Verificando horários disponíveis...</div>
+                ) : availableSlots.length === 0 ? (
+                  <div className="text-center py-8 bg-white rounded-2xl border border-slate-100">
+                    <Clock size={32} className="text-slate-200 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">Sem horários disponíveis neste dia.</p>
+                    <p className="text-slate-400 text-sm mt-1">Tente outra data.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {availableSlots.map(slot => (
+                      <button
+                        key={slot}
+                        onClick={() => setSelectedTime(slot)}
+                        className={`py-3 rounded-xl font-bold text-sm transition-all ${
+                          selectedTime === slot
+                            ? 'bg-primary text-white shadow-md shadow-primary/30 scale-105'
+                            : 'bg-white border border-slate-100 text-slate-700 hover:border-primary/40 hover:bg-primary/5'
+                        }`}
+                      >
+                        {slot}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Step 3: Client info + Payment + Confirm */}
+        {selectedService && selectedDate && selectedTime && (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+              <span className="size-7 rounded-full bg-primary text-white text-xs flex items-center justify-center font-black">4</span>
+              Seus Dados
+            </h2>
+            <input
+              type="text"
+              placeholder="Seu nome completo *"
+              value={clientName}
+              onChange={e => setClientName(e.target.value)}
+              className="w-full h-14 px-5 rounded-2xl bg-white border-2 border-slate-100 focus:border-primary outline-none transition-all text-slate-800 font-bold"
+            />
+            <div className="relative">
+              <Phone size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="tel"
+                placeholder="WhatsApp (opcional)"
+                value={clientPhone}
+                onChange={e => setClientPhone(maskPhone(e.target.value))}
+                className="w-full h-14 pl-12 pr-5 rounded-2xl bg-white border-2 border-slate-100 focus:border-primary outline-none transition-all text-slate-800 font-bold"
+              />
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Forma de Pagamento</p>
+              <div className="grid grid-cols-2 gap-2">
+                {['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito'].map(pm => (
+                  <button
+                    key={pm}
+                    onClick={() => setPaymentMethod(pm)}
+                    className={`py-3 px-4 rounded-xl font-bold text-sm transition-all border-2 ${
+                      paymentMethod === pm
+                        ? 'border-primary bg-primary text-white shadow-md shadow-primary/30'
+                        : 'border-slate-100 bg-white text-slate-600 hover:border-primary/30'
+                    }`}
+                  >
+                    {pm}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Summary card */}
+            <div className="bg-white rounded-3xl border border-slate-100 p-5 shadow-sm space-y-2 text-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Resumo do Agendamento</p>
+              <div className="flex justify-between"><span className="text-slate-500">Serviço</span><span className="font-bold text-slate-800">{selectedService.name}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Data</span><span className="font-bold text-slate-800">{selectedDate}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Horário</span><span className="font-bold text-primary">{selectedTime}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Valor</span><span className="font-black text-emerald-600">R$ {selectedService.price?.toFixed(2)}</span></div>
+            </div>
+
+            <button
+              onClick={handleConfirmBooking}
+              disabled={loading || !clientName}
+              className="w-full bg-primary text-white font-black h-16 rounded-2xl shadow-xl shadow-primary/30 text-lg hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? 'Confirmando...' : <><CheckCircle size={20} /> Confirmar Agendamento</>}
+            </button>
+          </motion.div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
 function App() {
+  // Check for public booking link: ?book=USER_ID
+  const bookingUserId = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('book')
+    : null;
+
+  if (bookingUserId) {
+    return <PublicBooking professionalId={bookingUserId} />;
+  }
+
+  return <AppMain />;
+}
+
+function AppMain() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
