@@ -287,7 +287,7 @@ const Navigation = ({
                     className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Data</label>
                     <input 
@@ -1424,7 +1424,7 @@ const Onboarding = ({ onComplete, isDarkMode }: { onComplete: () => void, isDark
       <div className="min-h-screen bg-white dark:bg-background-dark flex flex-col p-8 transition-colors">
         <button onClick={() => setStep(3)} className="size-12 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-surface-dark text-slate-600 dark:text-slate-400 mb-8 border border-slate-100 dark:border-border-dark hover:text-primary transition-colors"><ArrowLeft size={24} /></button>
         <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2">{isLogin ? 'Bem-vinda!' : 'Crie sua conta'}</h1>
-        <p className="text-slate-500 dark:text-slate-400 mb-10">{isLogin ? 'Falta pouco para acessar sua agenda.' : 'Preencha os dados básicos para começar.'}</p>
+        <p className="text-slate-500 dark:text-slate-400 mb-10">{isLogin ? 'Falta pouco para acessar sua agenda.' : 'Preencha suas informações para começar.'}</p>
 
         {error && <div className="mb-6 p-4 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-2xl border border-red-100 dark:border-red-500/20 flex items-center gap-3 text-sm font-medium"><LogOut size={16} /> {error}</div>}
 
