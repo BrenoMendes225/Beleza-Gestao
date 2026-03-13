@@ -1,20 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, 
   Calendar, 
-  Users, 
-  Settings, 
-  Plus, 
   Search, 
   Bell, 
   TrendingUp, 
   ChevronRight,
   Clock,
-  Scissors,
   Palette,
   Hand,
   Sparkles,
-  ArrowLeft,
   MoreVertical,
   Home,
   BarChart3,
@@ -22,15 +16,22 @@ import {
   CreditCard,
   ArrowRight,
   Camera,
-  LogOut,
-  Moon,
-  Sun,
   Wallet,
   FileText,
   CheckCircle,
   XCircle,
   Download,
-  Share2
+  LayoutDashboard, 
+  Scissors, 
+  Users, 
+  Settings, 
+  Plus, 
+  Sun, 
+  Moon, 
+  ArrowLeft, 
+  LogOut, 
+  Share2,
+  Phone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Client, Service, Appointment, DashboardStats, Expense, Notification as AppNotification } from './types';
@@ -143,7 +144,17 @@ const Navigation = ({
       </nav>
     </>
   );
-};const NewRecordModal = ({ 
+};
+
+const maskPhone = (value: string) => {
+  if (!value) return "";
+  value = value.replace(/\D/g, "");
+  value = value.replace(/^(\d{2})(\d)/g, "$1 $2");
+  value = value.replace(/(\d{5})(\d)/, "$1-$2");
+  return value.slice(0, 15); // Max length for (XX) XXXXX-XXXX
+};
+
+const NewRecordModal = ({ 
   isOpen, 
   onClose, 
   user, 
@@ -167,10 +178,12 @@ const Navigation = ({
   const [paymentMethod, setPaymentMethod] = useState('Dinheiro');
   const [showSuccess, setShowSuccess] = useState(false);
   const [clientName, setClientName] = useState('');
+  const [clientId, setClientId] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('10:00');
   const [services, setServices] = useState<Service[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
 
   // Client form
   const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' });
@@ -182,6 +195,7 @@ const Navigation = ({
     if (isOpen) {
       setType(initialType);
       supabase.from('services').select('*').then(({ data }) => setServices(data || []));
+      supabase.from('clients').select('*').order('name').then(({ data }) => setClients(data || []));
     }
   }, [isOpen, initialType]);
 
@@ -191,13 +205,14 @@ const Navigation = ({
     setLoading(true);
     try {
       if (type === 'appointment') {
-        const { data: clientData } = await supabase.from('clients').select('id').eq('name', clientName).single();
-        let cid = clientData?.id;
+        let cid = clientId;
         
-        if (!cid) {
+        if ((!cid || cid === 'new') && clientName) {
           const { data: newC } = await supabase.from('clients').insert({ name: clientName, user_id: user.id }).select().single();
           cid = newC?.id;
         }
+
+        if (!cid || cid === 'new') throw new Error("Por favor, selecione ou digite o nome de uma cliente.");
 
         const { error } = await supabase.from('appointments').insert({
           user_id: user.id,
@@ -289,13 +304,31 @@ const Navigation = ({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Cliente</label>
-                  <input 
-                    type="text" 
-                    placeholder="Nome da cliente" 
-                    value={clientName}
-                    onChange={e => setClientName(e.target.value)}
-                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
-                  />
+                  <div className="flex gap-2">
+                    <select 
+                      value={clientId}
+                      onChange={e => {
+                        setClientId(e.target.value);
+                        if (e.target.value !== "new") setClientName("");
+                      }}
+                      className="flex-1 h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-medium"
+                    >
+                      <option value="">Selecione uma cliente</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option value="new">+ Nova Cliente</option>
+                    </select>
+                  </div>
+                  {clientId === "new" && (
+                    <motion.input 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      type="text" 
+                      placeholder="Nome da nova cliente" 
+                      value={clientName}
+                      onChange={e => setClientName(e.target.value)}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white mt-2 font-bold"
+                    />
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -358,18 +391,27 @@ const Navigation = ({
 
             {type === 'client' && (
               <div className="space-y-4">
-                <input 
-                  placeholder="Nome completo" 
-                  value={newClient.name}
-                  onChange={e => setNewClient({...newClient, name: e.target.value})}
-                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
-                />
-                <input 
-                  placeholder="WhatsApp / Telefone" 
-                  value={newClient.phone}
-                  onChange={e => setNewClient({...newClient, phone: e.target.value})}
-                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
-                />
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Nome Completo</label>
+                  <input 
+                    placeholder="Ex: Maria Oliveira" 
+                    value={newClient.name}
+                    onChange={e => setNewClient({...newClient, name: e.target.value})}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">WhatsApp / Telefone</label>
+                  <div className="relative">
+                    <Phone size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      placeholder="31 98546-0918" 
+                      value={newClient.phone}
+                      onChange={e => setNewClient({...newClient, phone: maskPhone(e.target.value)})}
+                      className="w-full h-14 pl-12 pr-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
