@@ -162,7 +162,8 @@ const NewRecordModal = ({
   initialType = 'appointment', 
   showTabs = true,
   isDarkMode,
-  editingAppointment
+  editingAppointment,
+  editingService
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
@@ -171,9 +172,12 @@ const NewRecordModal = ({
   initialType?: 'appointment' | 'client' | 'service',
   showTabs?: boolean,
   isDarkMode: boolean,
-  editingAppointment?: Appointment | null
+  editingAppointment?: Appointment | null,
+  editingService?: Service | null
 }) => {
-  const [type, setType] = useState<'appointment' | 'client' | 'service'>(editingAppointment ? 'appointment' : initialType);
+  const [type, setType] = useState<'appointment' | 'client' | 'service'>(
+    editingAppointment ? 'appointment' : (editingService ? 'service' : initialType)
+  );
   const [loading, setLoading] = useState(false);
   
   // Appointment form
@@ -191,29 +195,42 @@ const NewRecordModal = ({
   const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' });
   
   // Service form
-  const [newService, setNewService] = useState({ name: '', price: '', duration: '60', category: 'Cabelo' });
+  const [newService, setNewService] = useState({ 
+    name: editingService?.name || '', 
+    price: editingService?.price?.toString() || '', 
+    duration: editingService?.duration?.toString() || '60', 
+    category: editingService?.category || 'Cabelo' 
+  });
 
   useEffect(() => {
     if (isOpen) {
-      if (!editingAppointment) {
-        setType(initialType);
-        setPaymentMethod('Dinheiro');
-        setClientId('');
-        setServiceId('');
-        setDate(new Date().toISOString().split('T')[0]);
-        setTime('10:00');
-      } else {
+      if (editingAppointment) {
         setType('appointment');
         setPaymentMethod(editingAppointment.payment_method || 'Dinheiro');
         setClientId(editingAppointment.client_id);
         setServiceId(editingAppointment.service_id);
         setDate(editingAppointment.date);
         setTime(editingAppointment.time);
+      } else if (editingService) {
+        setType('service');
+        setNewService({
+          name: editingService.name,
+          price: editingService.price.toString(),
+          duration: editingService.duration.toString(),
+          category: editingService.category
+        });
+      } else {
+        setType(initialType);
+        setPaymentMethod('Dinheiro');
+        setClientId('');
+        setServiceId('');
+        setDate(new Date().toISOString().split('T')[0]);
+        setTime('10:00');
       }
       supabase.from('services').select('*').then(({ data }) => setServices(data || []));
       supabase.from('clients').select('*').order('name').then(({ data }) => setClients(data || []));
     }
-  }, [isOpen, initialType, editingAppointment]);
+  }, [isOpen, initialType, editingAppointment, editingService]);
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -263,13 +280,20 @@ const NewRecordModal = ({
         const { error } = await supabase.from('clients').insert({ ...newClient, user_id: user.id });
         if (error) throw error;
       } else if (type === 'service') {
-        const { error } = await supabase.from('services').insert({ 
+        const serviceData = { 
           ...newService, 
           user_id: user.id,
           price: parseFloat(newService.price),
           duration: parseInt(newService.duration)
-        });
-        if (error) throw error;
+        };
+
+        if (editingService) {
+          const { error } = await supabase.from('services').update(serviceData).eq('id', editingService.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('services').insert(serviceData);
+          if (error) throw error;
+        }
       }
       onSave();
       onClose();
@@ -698,36 +722,64 @@ const NotificationOverlay = ({
   );
 };
 
-const FinanceScreen = ({ user, isDarkMode, onOpenAddExpense }: { user: User, isDarkMode: boolean, onOpenAddExpense: () => void }) => {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { user: User, isDarkMode: boolean, refreshKey: number, onOpenAddExpense: () => void }) => {
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [revenue, setRevenue] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
+    setLoading(true);
     // Fetch Expenses
     const { data: expData } = await supabase
       .from('expenses')
-      .select('*')
-      .order('date', { ascending: false });
-    if (expData) setExpenses(expData);
-
-    // Fetch Revenue (Only completed services)
+      .select('*');
+    
+    // Fetch Completed Appointments with details
     const { data: completedApts } = await supabase
       .from('appointments')
-      .select('service:service_id(price)')
+      .select('id, date, time, client:client_id(name), service:service_id(name, price)')
       .eq('status', 'completed');
     
+    // Calculate total revenue
     const rev = completedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
     setRevenue(rev);
     
+    // Merge into transactions
+    const txs: any[] = [];
+    
+    expData?.forEach(exp => {
+      txs.push({
+        id: exp.id,
+        type: 'expense',
+        date: exp.date,
+        description: exp.description,
+        amount: exp.amount,
+        category: exp.category
+      });
+    });
+    
+    completedApts?.forEach((apt: any) => {
+      txs.push({
+        id: apt.id,
+        type: 'revenue',
+        date: apt.date,
+        description: `${apt.client?.name || 'Cliente'} - ${apt.service?.name || 'Serviço'}`,
+        amount: apt.service?.price || 0,
+        category: 'Atendimento'
+      });
+    });
+    
+    // Sort by date descending
+    txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setTransactions(txs);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [refreshKey]);
 
-  const totalExpenses = expenses.reduce((acc, exp) => acc + exp.amount, 0);
+  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
 
   return (
     <div className="pb-24 p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
@@ -773,30 +825,36 @@ const FinanceScreen = ({ user, isDarkMode, onOpenAddExpense }: { user: User, isD
       </div>
 
       <div className="p-8 rounded-[32px] bg-white dark:bg-surface-dark shadow-xl border border-slate-50 dark:border-border-dark">
-        <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Últimas Despesas</h4>
+        <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Fluxo de Caixa</h4>
         <div className="space-y-4">
           {loading ? (
-            <div className="py-12 text-center text-slate-400">Carregando despesas...</div>
-          ) : expenses.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">Carregando transações...</div>
+          ) : transactions.length === 0 ? (
             <div className="py-12 text-center">
               <div className="size-20 rounded-full bg-slate-50 dark:bg-background-dark flex items-center justify-center mx-auto mb-4">
                 <Wallet className="text-slate-200 dark:text-slate-700" size={32} />
               </div>
-              <p className="text-slate-400 dark:text-slate-500 text-sm italic">Nenhuma despesa registrada ainda.</p>
+              <p className="text-slate-400 dark:text-slate-500 text-sm italic">Nenhuma transação registrada ainda.</p>
             </div>
           ) : (
-            expenses.map(exp => (
-              <div key={exp.id} className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-background-dark transition-colors group">
+            transactions.map(tx => (
+              <div key={`${tx.type}-${tx.id}`} className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-background-dark transition-colors group">
                 <div className="flex items-center gap-4">
-                  <div className="size-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                    <CreditCard size={20} />
+                  <div className={`size-12 rounded-xl flex items-center justify-center transition-colors ${
+                    tx.type === 'revenue' 
+                      ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500' 
+                      : 'bg-rose-50 dark:bg-rose-500/10 text-rose-500'
+                  }`}>
+                    {tx.type === 'revenue' ? <TrendingUp size={20} /> : <CreditCard size={20} />}
                   </div>
                   <div>
-                    <p className="font-bold text-slate-800 dark:text-white">{exp.description}</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium uppercase tracking-tighter">{exp.category} • {exp.date}</p>
+                    <p className="font-bold text-slate-800 dark:text-white truncate max-w-[200px] md:max-w-md">{tx.description}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium uppercase tracking-tighter">{tx.category} • {tx.date}</p>
                   </div>
                 </div>
-                <p className="font-black text-rose-500">- R$ {exp.amount.toFixed(2)}</p>
+                <p className={`font-black ${tx.type === 'revenue' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {tx.type === 'revenue' ? '+' : '-'} R$ {tx.amount.toFixed(2)}
+                </p>
               </div>
             ))
           )}
@@ -811,12 +869,14 @@ const FinanceScreen = ({ user, isDarkMode, onOpenAddExpense }: { user: User, isD
 const Dashboard = ({ 
   user, 
   isDarkMode, 
+  refreshKey,
   onSelectApt, 
   onOpenNotifications, 
   unreadCount 
 }: { 
   user: User, 
   isDarkMode: boolean, 
+  refreshKey: number,
   onSelectApt: (apt: Appointment) => void,
   onOpenNotifications: () => void,
   unreadCount: number
@@ -835,7 +895,7 @@ const Dashboard = ({
       const { data: confirmedApts } = await supabase
         .from('appointments')
         .select('service:service_id(price)')
-        .eq('status', 'confirmed');
+        .eq('status', 'completed');
       
       const revenue = confirmedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
       
@@ -857,29 +917,48 @@ const Dashboard = ({
         totalClients: totalCl?.length || 0
       });
 
-      // Fetch Recent Appointments
-      const { data: recent } = await supabase
+      // Fetch Weekly Performance Data
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      const startDate = sevenDaysAgo.toISOString().split('T')[0];
+
+      const { data: weeklyApts } = await supabase
         .from('appointments')
-        .select(`
-          *,
-          client:client_id(name),
-          service:service_id(name, price)
-        `)
-        .order('date', { ascending: true })
-        .order('time', { ascending: true });
+        .select('date, service:service_id(price)')
+        .eq('status', 'completed')
+        .gte('date', startDate);
       
-      if (recent) {
-        setAppointments(recent.map(apt => ({
-          ...apt,
-          client_name: (apt.client as any)?.name,
-          service_name: (apt.service as any)?.name,
-          price: (apt.service as any)?.price
-        })));
+      const chartValues = Array(7).fill(0);
+      const daysAbbr = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+      const chartLabels: string[] = [];
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        const dStr = d.toISOString().split('T')[0];
+        chartLabels.push(daysAbbr[d.getDay()]);
+        
+        const dayTotal = weeklyApts?.filter(a => a.date === dStr)
+          .reduce((sum, a: any) => sum + (a.service?.price || 0), 0) || 0;
+        chartValues[i] = dayTotal;
       }
+      
+      const maxVal = Math.max(...chartValues, 1);
+      setChartData({
+        labels: chartLabels,
+        values: chartValues.map(v => (v / maxVal) * 100),
+        rawValues: chartValues
+      });
     };
 
     fetchData();
-  }, [user.id]);
+  }, [user.id, refreshKey]);
+
+  const [chartData, setChartData] = useState<{ labels: string[], values: number[], rawValues: number[] }>({
+    labels: ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'],
+    values: [0, 0, 0, 0, 0, 0, 0],
+    rawValues: [0, 0, 0, 0, 0, 0, 0]
+  });
 
   const netProfit = (stats?.revenue || 0) - (stats?.expenses || 0);
 
@@ -896,7 +975,7 @@ const Dashboard = ({
             )}
           </div>
           <div className="ml-3">
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider">Bem-vinda{profile?.salon_name ? ` ao ${profile.salon_name}` : ''},</p>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider">Bem-vinda{profile?.salon_name ? ` ${profile.salon_name}` : ''},</p>
             <h2 className="text-slate-900 dark:text-white text-lg font-bold">{profile?.full_name || user.email?.split('@')[0]}</h2>
           </div>
         </div>
@@ -943,14 +1022,17 @@ const Dashboard = ({
             <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase">Últimos 7 dias</span>
           </div>
           <div className="flex items-end justify-between h-32 px-1">
-            {[65, 80, 100, 50, 90, 40, 30].map((height, i) => (
-              <div key={i} className="flex flex-col items-center gap-2 flex-1">
+            {chartData.values.map((height, i) => (
+              <div key={i} className="flex flex-col items-center gap-2 flex-1 group/bar relative">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
+                  R$ {chartData.rawValues[i].toFixed(0)}
+                </div>
                 <div 
-                  className={`w-full rounded-t-full ${height === 100 ? 'bg-primary' : 'bg-primary/20'}`} 
-                  style={{ height: `${height}%` }}
+                  className={`w-full max-w-[12px] rounded-t-full transition-all duration-500 ${height > 0 ? 'bg-primary' : 'bg-slate-100 dark:bg-background-dark'}`} 
+                  style={{ height: `${Math.max(height, 5)}%` }}
                 ></div>
                 <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
-                  {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'][i]}
+                  {chartData.labels[i]}
                 </span>
               </div>
             ))}
@@ -1080,6 +1162,9 @@ const SettingsScreen = ({
           </div>
           <h2 className="mt-4 text-xl font-bold text-slate-900 dark:text-white">{profile?.full_name}</h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm">{user.email}</p>
+          <div className="mt-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">
+            Versão Beta
+          </div>
         </div>
 
         <div className="p-6 space-y-4">
@@ -1124,10 +1209,10 @@ const SettingsScreen = ({
   );
 };
 
-const Agenda = ({ user, isDarkMode, onEdit }: { user: User, isDarkMode: boolean, onEdit: (apt: Appointment) => void }) => {
+const Agenda = ({ user, isDarkMode, refreshKey, onEdit, onStatusUpdate }: { user: User, isDarkMode: boolean, refreshKey: number, onEdit: (apt: Appointment) => void, onStatusUpdate: () => void }) => {
   const [filter, setFilter] = useState('Confirmados');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const tabs = ['Pendentes', 'Confirmados', 'Cancelados'];
+  const tabs = ['Pendentes', 'Finalizados', 'Cancelados'];
 
   useEffect(() => {
     supabase
@@ -1144,12 +1229,13 @@ const Agenda = ({ user, isDarkMode, onEdit }: { user: User, isDarkMode: boolean,
           })));
         }
       });
-  }, []);
+  }, [refreshKey]);
 
   const updateAptStatus = async (id: string, status: string) => {
     const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
     if (!error) {
       setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
+      onStatusUpdate();
     }
   };
 
@@ -1254,7 +1340,7 @@ const Agenda = ({ user, isDarkMode, onEdit }: { user: User, isDarkMode: boolean,
 };
 
 
-const Services = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, isDarkMode: boolean }) => {
+const Services = ({ user, onAdd, onEdit, isDarkMode }: { user: User, onAdd: () => void, onEdit: (s: Service) => void, isDarkMode: boolean }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [category, setCategory] = useState('Cabelo');
   const categories = ['Cabelo', 'Unhas', 'Estética', 'Maquiagem'];
@@ -1328,7 +1414,12 @@ const Services = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, 
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xl font-black text-primary tracking-tighter">R$ {service.price?.toFixed(2)}</p>
-                <button className="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase mt-1 group-hover:text-primary transition-colors">Editar</button>
+                <button 
+                  onClick={() => onEdit(service)}
+                  className="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase mt-1 group-hover:text-primary transition-colors hover:underline"
+                >
+                  Editar
+                </button>
               </div>
             </div>
           ))}
@@ -1911,6 +2002,7 @@ function App() {
   const [modalType, setModalType] = useState<'appointment' | 'client' | 'service' | 'expense'>('appointment');
   const [modalShowTabs, setModalShowTabs] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   
   const refreshFinance = () => setRefreshKey(prev => prev + 1);
 
@@ -2052,38 +2144,53 @@ function App() {
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
             >
               {activeTab === 'dashboard' && (
-              <div key={`dash-${refreshKey}`}>
                 <Dashboard 
                   user={user} 
                   isDarkMode={isDarkMode} 
-                  onSelectApt={handleOpenReceipt}
-                  onOpenNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  refreshKey={refreshKey}
                   unreadCount={notifications.filter(n => !n.read).length}
+                  onOpenNotifications={() => setIsNotificationsOpen(true)}
+                  onSelectApt={(apt) => {
+                    setEditingAppointment(apt);
+                    setModalType('appointment');
+                    setIsModalOpen(true);
+                  }} 
                 />
-              </div>
               )}
               {activeTab === 'agenda' && (
                 <Agenda 
                   user={user} 
                   isDarkMode={isDarkMode} 
+                  refreshKey={refreshKey}
                   onEdit={(apt) => {
                     setEditingAppointment(apt);
                     setModalType('appointment');
+                    setIsModalOpen(true);
+                  }}
+                  onStatusUpdate={refreshFinance}
+                />
+              )}
+              {activeTab === 'finances' && (
+                <FinanceScreen 
+                  user={user} 
+                  isDarkMode={isDarkMode} 
+                  refreshKey={refreshKey}
+                  onOpenAddExpense={openAddExpense} 
+                />
+              )}
+              {activeTab === 'services' && (
+                <Services 
+                  user={user} 
+                  isDarkMode={isDarkMode} 
+                  onAdd={() => { setModalType('service'); setModalShowTabs(false); setIsModalOpen(true); }} 
+                  onEdit={(s) => {
+                    setEditingService(s);
+                    setModalType('service');
                     setModalShowTabs(false);
                     setIsModalOpen(true);
                   }}
                 />
               )}
-              {activeTab === 'finances' && (
-              <div key={`fin-${refreshKey}`}>
-                <FinanceScreen 
-                  user={user} 
-                  isDarkMode={isDarkMode} 
-                  onOpenAddExpense={openAddExpense} 
-                />
-              </div>
-              )}
-              {activeTab === 'services' && <Services user={user} isDarkMode={isDarkMode} onAdd={() => { setModalType('service'); setModalShowTabs(false); setIsModalOpen(true); }} />}
               {activeTab === 'clients' && <Clients user={user} isDarkMode={isDarkMode} onAdd={() => { setModalType('client'); setModalShowTabs(false); setIsModalOpen(true); }} />}
               {activeTab === 'settings' && <SettingsScreen user={user} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />}
             </motion.div>
@@ -2096,9 +2203,11 @@ function App() {
         onClose={() => {
           setIsModalOpen(false);
           setEditingAppointment(null);
+          setEditingService(null);
         }} 
         user={user}
         editingAppointment={editingAppointment}
+        editingService={editingService}
         showTabs={modalShowTabs}
         onSave={() => {
           refreshFinance();
