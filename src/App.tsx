@@ -164,6 +164,8 @@ const Navigation = ({
   const [loading, setLoading] = useState(false);
   
   // Appointment form
+  const [paymentMethod, setPaymentMethod] = useState('Dinheiro');
+  const [showSuccess, setShowSuccess] = useState(false);
   const [clientName, setClientName] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -203,9 +205,17 @@ const Navigation = ({
           service_id: serviceId,
           date,
           time,
-          status: 'pending'
+          status: 'pending',
+          payment_method: paymentMethod
         });
         if (error) throw error;
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+          onSave();
+          onClose();
+        }, 2000);
+        return;
       } else if (type === 'client') {
         const { error } = await supabase.from('clients').insert({ ...newClient, user_id: user.id });
         if (error) throw error;
@@ -318,6 +328,31 @@ const Navigation = ({
                     {services.map(s => <option key={s.id} value={s.id}>{s.name} - R$ {s.price}</option>)}
                   </select>
                 </div>
+                <div className="space-y-4">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Forma de Pagamento</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { id: 'Dinheiro', icon: '💵' },
+                      { id: 'Cartão de Crédito', icon: '💳' },
+                      { id: 'Cartão de Débito', icon: '🏧' },
+                      { id: 'Pix', icon: '📱' },
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(m.id)}
+                        className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
+                          paymentMethod === m.id 
+                            ? 'border-primary bg-primary/5 text-primary' 
+                            : 'border-slate-100 dark:border-border-dark bg-slate-50 dark:bg-background-dark text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        <span className="text-xl">{m.icon}</span>
+                        <span className="text-xs font-bold whitespace-nowrap">{m.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -382,6 +417,23 @@ const Navigation = ({
             {loading ? 'Salvando...' : 'Confirmar e Salvar'}
           </button>
         </div>
+
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white dark:bg-surface-dark text-center p-8"
+            >
+              <div className="size-24 bg-emerald-500 rounded-full flex items-center justify-center text-white mb-6 shadow-xl shadow-emerald-500/20 animate-bounce">
+                <Plus size={48} className="rotate-0" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Agendamento Realizado!</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Tudo certo para o atendimento.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
