@@ -28,6 +28,7 @@ export interface Appointment {
   client_name?: string;
   service_name?: string;
   price?: number;
+  payment_method?: string;
 }
 
 export interface DashboardStats {

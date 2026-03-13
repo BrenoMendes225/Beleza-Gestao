@@ -161,7 +161,8 @@ const NewRecordModal = ({
   onSave, 
   initialType = 'appointment', 
   showTabs = true,
-  isDarkMode
+  isDarkMode,
+  editingAppointment
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
@@ -169,19 +170,20 @@ const NewRecordModal = ({
   onSave: () => void,
   initialType?: 'appointment' | 'client' | 'service',
   showTabs?: boolean,
-  isDarkMode: boolean
+  isDarkMode: boolean,
+  editingAppointment?: Appointment | null
 }) => {
-  const [type, setType] = useState<'appointment' | 'client' | 'service'>(initialType);
+  const [type, setType] = useState<'appointment' | 'client' | 'service'>(editingAppointment ? 'appointment' : initialType);
   const [loading, setLoading] = useState(false);
   
   // Appointment form
-  const [paymentMethod, setPaymentMethod] = useState('Dinheiro');
+  const [paymentMethod, setPaymentMethod] = useState(editingAppointment?.payment_method || 'Dinheiro');
   const [showSuccess, setShowSuccess] = useState(false);
   const [clientName, setClientName] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [serviceId, setServiceId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState('10:00');
+  const [clientId, setClientId] = useState(editingAppointment?.client_id || '');
+  const [serviceId, setServiceId] = useState(editingAppointment?.service_id || '');
+  const [date, setDate] = useState(editingAppointment?.date || new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState(editingAppointment?.time || '10:00');
   const [services, setServices] = useState<Service[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
 
@@ -193,11 +195,25 @@ const NewRecordModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setType(initialType);
+      if (!editingAppointment) {
+        setType(initialType);
+        setPaymentMethod('Dinheiro');
+        setClientId('');
+        setServiceId('');
+        setDate(new Date().toISOString().split('T')[0]);
+        setTime('10:00');
+      } else {
+        setType('appointment');
+        setPaymentMethod(editingAppointment.payment_method || 'Dinheiro');
+        setClientId(editingAppointment.client_id);
+        setServiceId(editingAppointment.service_id);
+        setDate(editingAppointment.date);
+        setTime(editingAppointment.time);
+      }
       supabase.from('services').select('*').then(({ data }) => setServices(data || []));
       supabase.from('clients').select('*').order('name').then(({ data }) => setClients(data || []));
     }
-  }, [isOpen, initialType]);
+  }, [isOpen, initialType, editingAppointment]);
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -214,16 +230,28 @@ const NewRecordModal = ({
 
         if (!cid || cid === 'new') throw new Error("Por favor, selecione ou digite o nome de uma cliente.");
 
-        const { error } = await supabase.from('appointments').insert({
-          user_id: user.id,
-          client_id: cid,
-          service_id: serviceId,
-          date,
-          time,
-          status: 'pending',
-          payment_method: paymentMethod
-        });
-        if (error) throw error;
+        if (editingAppointment) {
+          const { error } = await supabase.from('appointments').update({
+            client_id: cid,
+            service_id: serviceId,
+            date,
+            time,
+            payment_method: paymentMethod
+          }).eq('id', editingAppointment.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('appointments').insert({
+            user_id: user.id,
+            client_id: cid,
+            service_id: serviceId,
+            date,
+            time,
+            status: 'pending',
+            payment_method: paymentMethod
+          });
+          if (error) throw error;
+        }
+
         setShowSuccess(true);
         setTimeout(() => {
           setShowSuccess(false);
@@ -330,7 +358,7 @@ const NewRecordModal = ({
                     />
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Data</label>
                     <input 
@@ -361,30 +389,18 @@ const NewRecordModal = ({
                     {services.map(s => <option key={s.id} value={s.id}>{s.name} - R$ {s.price}</option>)}
                   </select>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Forma de Pagamento</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { id: 'Dinheiro', icon: '💵' },
-                      { id: 'Cartão de Crédito', icon: '💳' },
-                      { id: 'Cartão de Débito', icon: '🏧' },
-                      { id: 'Pix', icon: '📱' },
-                    ].map(m => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(m.id)}
-                        className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                          paymentMethod === m.id 
-                            ? 'border-primary bg-primary/5 text-primary' 
-                            : 'border-slate-100 dark:border-border-dark bg-slate-50 dark:bg-background-dark text-slate-600 dark:text-slate-400'
-                        }`}
-                      >
-                        <span className="text-xl">{m.icon}</span>
-                        <span className="text-xs font-bold whitespace-nowrap">{m.id}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <select 
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value)}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  >
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                    <option value="Pix">Pix</option>
+                  </select>
                 </div>
               </div>
             )}
@@ -695,13 +711,13 @@ const FinanceScreen = ({ user, isDarkMode, onOpenAddExpense }: { user: User, isD
       .order('date', { ascending: false });
     if (expData) setExpenses(expData);
 
-    // Fetch Revenue
-    const { data: confirmedApts } = await supabase
+    // Fetch Revenue (Only completed services)
+    const { data: completedApts } = await supabase
       .from('appointments')
       .select('service:service_id(price)')
-      .eq('status', 'confirmed');
+      .eq('status', 'completed');
     
-    const rev = confirmedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
+    const rev = completedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
     setRevenue(rev);
     
     setLoading(false);
@@ -1108,7 +1124,7 @@ const SettingsScreen = ({
   );
 };
 
-const Agenda = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
+const Agenda = ({ user, isDarkMode, onEdit }: { user: User, isDarkMode: boolean, onEdit: (apt: Appointment) => void }) => {
   const [filter, setFilter] = useState('Confirmados');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const tabs = ['Pendentes', 'Confirmados', 'Cancelados'];
@@ -1123,11 +1139,19 @@ const Agenda = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
           setAppointments(data.map(apt => ({
             ...apt,
             client_name: (apt.client as any)?.name,
-            service_name: (apt.service as any)?.name
+            service_name: (apt.service as any)?.name,
+            service_price: (apt.service as any)?.price
           })));
         }
       });
   }, []);
+
+  const updateAptStatus = async (id: string, status: string) => {
+    const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+    if (!error) {
+      setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
+    }
+  };
 
   return (
     <div className="pb-24 md:pb-8">
@@ -1160,26 +1184,67 @@ const Agenda = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
           <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-1 rounded-full uppercase">{appointments.length} Horários</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {appointments.map(apt => (
-            <div key={apt.id} className="flex flex-col gap-4 bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:-translate-y-1">
-              <div className="flex items-center gap-4 border-b border-slate-50 dark:border-border-dark pb-4">
+          {appointments.filter(apt => filter === 'Todos' || (filter === 'Pendentes' && apt.status === 'pending') || (filter === 'Finalizados' && apt.status === 'completed')).map(apt => (
+            <div key={apt.id} className="flex flex-col gap-4 bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md">
+              <div className="flex items-center gap-4">
                 <div className="size-14 rounded-full border-2 border-primary/20 overflow-hidden shrink-0">
                   <img src={`https://picsum.photos/seed/${apt.client_name}/100/100`} alt={apt.client_name} referrerPolicy="no-referrer" />
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
-                    <p className="text-base font-bold leading-tight mb-1 line-clamp-1 dark:text-white">{apt.client_name}</p>
-                    <span className={`size-3 rounded-full shrink-0 ${
-                      apt.status === 'confirmed' ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : 'bg-amber-500 shadow-sm shadow-amber-500/40'
-                    }`}></span>
+                    <div>
+                      <p className="text-base font-bold leading-tight line-clamp-1 dark:text-white">{apt.client_name}</p>
+                      <p className="text-primary text-xs font-bold mt-1">{apt.service_name}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                      apt.status === 'completed' 
+                        ? 'bg-emerald-500/10 text-emerald-500' 
+                        : apt.status === 'cancelled'
+                        ? 'bg-rose-500/10 text-rose-500'
+                        : 'bg-amber-500/10 text-amber-500'
+                    }`}>
+                      {apt.status === 'completed' ? 'Finalizado' : apt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                    </span>
                   </div>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs font-medium bg-slate-50 dark:bg-background-dark inline-block px-2 py-1 rounded-md">{apt.time} — {apt.time} (45m)</p>
                 </div>
               </div>
-              <div>
-                <p className="text-primary text-sm font-bold mb-1">{apt.service_name}</p>
-                <p className="text-slate-500 dark:text-slate-400 text-xs">{apt.professional_name}</p>
+              
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-50 dark:border-border-dark">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                  <Calendar size={14} className="text-primary/60" />
+                  <span className="text-[11px] font-bold">{new Date(apt.date).toLocaleDateString('pt-BR')}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                  <Clock size={14} className="text-primary/60" />
+                  <span className="text-[11px] font-bold">{apt.time}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                  <CreditCard size={14} className="text-primary/60" />
+                  <span className="text-[11px] font-bold">{apt.payment_method}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                  <TrendingUp size={14} className="text-emerald-500/60" />
+                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">R$ {apt.service_price}</span>
+                </div>
               </div>
+
+              {apt.status === 'pending' && (
+                <div className="flex gap-2 pt-2">
+                  <button 
+                    onClick={() => updateAptStatus(apt.id, 'completed')}
+                    className="flex-1 h-10 rounded-xl bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm shadow-emerald-500/20 active:scale-95 transition-all"
+                  >
+                    <CheckCircle size={14} /> Finalizar
+                  </button>
+                  <button 
+                    onClick={() => onEdit(apt)}
+                    className="size-10 rounded-xl bg-slate-100 dark:bg-background-dark text-slate-500 dark:text-slate-400 flex items-center justify-center active:scale-95 transition-all"
+                    title="Editar"
+                  >
+                    <Scissors size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1187,6 +1252,7 @@ const Agenda = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
     </div>
   );
 };
+
 
 const Services = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, isDarkMode: boolean }) => {
   const [services, setServices] = useState<Service[]>([]);
@@ -1832,22 +1898,26 @@ function App() {
     }
     return false;
   });
-  const [salonName, setSalonName] = useState('');
+  const [selectedReceipt, setSelectedReceipt] = useState<Appointment | null>(null);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  
+  const [salonName, setSalonName] = useState('Meu Salão');
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Modals & Overlays State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'appointment' | 'client' | 'service' | 'expense'>('appointment');
   const [modalShowTabs, setModalShowTabs] = useState(true);
-  const [selectedReceipt, setSelectedReceipt] = useState<Appointment | null>(null);
-  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  
+  const refreshFinance = () => setRefreshKey(prev => prev + 1);
 
-  // Expense specific states
+  // Expense form state
   const [expenseDesc, setExpenseDesc] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseCategory, setExpenseCategory] = useState('Aluguel');
+  const [expenseCategory, setExpenseCategory] = useState('Outros');
 
   useEffect(() => {
     if (isDarkMode) {
@@ -1992,7 +2062,18 @@ function App() {
                 />
               </div>
               )}
-              {activeTab === 'agenda' && <Agenda user={user} isDarkMode={isDarkMode} />}
+              {activeTab === 'agenda' && (
+                <Agenda 
+                  user={user} 
+                  isDarkMode={isDarkMode} 
+                  onEdit={(apt) => {
+                    setEditingAppointment(apt);
+                    setModalType('appointment');
+                    setModalShowTabs(false);
+                    setIsModalOpen(true);
+                  }}
+                />
+              )}
               {activeTab === 'finances' && (
               <div key={`fin-${refreshKey}`}>
                 <FinanceScreen 
@@ -2012,11 +2093,16 @@ function App() {
 
       <NewRecordModal 
         isOpen={isModalOpen && modalType !== 'expense'} 
-        onClose={() => setIsModalOpen(false)} 
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingAppointment(null);
+        }} 
         user={user}
-        initialType={modalType as any}
+        editingAppointment={editingAppointment}
         showTabs={modalShowTabs}
-        onSave={() => {}}
+        onSave={() => {
+          refreshFinance();
+        }}
         isDarkMode={isDarkMode}
       />
 
