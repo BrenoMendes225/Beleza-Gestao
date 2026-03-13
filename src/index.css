@@ -6,11 +6,20 @@
   --color-primary: #e6193c;
   --color-background-light: #f8f6f6;
   --color-background-dark: #211114;
+  --color-surface-dark: #2a161b;
+  --color-border-dark: #3d1f27;
+  --color-text-dark-primary: #ffffff;
+  --color-text-dark-secondary: #a19b9b;
 }
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   body {
-    @apply font-sans bg-background-light text-slate-900;
+    @apply font-sans bg-background-light text-slate-900 transition-colors duration-300;
+  }
+  .dark body {
+    @apply bg-background-dark text-white;
   }
 }
 

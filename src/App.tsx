@@ -22,7 +22,9 @@ import {
   CreditCard,
   ArrowRight,
   Camera,
-  LogOut
+  LogOut,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Client, Service, Appointment, DashboardStats } from './types';
@@ -31,7 +33,19 @@ import { User } from '@supabase/supabase-js';
 
 // --- Components ---
 
-const Navigation = ({ activeTab, setActiveTab, onNewRecord }: { activeTab: string, setActiveTab: (tab: string) => void, onNewRecord: () => void }) => {
+const Navigation = ({ 
+  activeTab, 
+  setActiveTab, 
+  onNewRecord,
+  isDarkMode,
+  toggleDarkMode 
+}: { 
+  activeTab: string, 
+  setActiveTab: (tab: string) => void, 
+  onNewRecord: () => void,
+  isDarkMode: boolean,
+  toggleDarkMode: () => void
+}) => {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
@@ -43,12 +57,12 @@ const Navigation = ({ activeTab, setActiveTab, onNewRecord }: { activeTab: strin
   return (
     <>
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 pb-6 pt-3 flex justify-between items-center z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-border-dark px-6 pb-6 pt-3 flex justify-between items-center z-50 transition-colors">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-slate-400'}`}
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
           >
             <tab.icon size={24} fill={activeTab === tab.id ? 'currentColor' : 'none'} />
             <span className="text-[10px] font-bold uppercase tracking-wider">{tab.label}</span>
@@ -65,10 +79,18 @@ const Navigation = ({ activeTab, setActiveTab, onNewRecord }: { activeTab: strin
       </nav>
 
       {/* Desktop Sidebar Navigation */}
-      <nav className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-slate-200 flex-col z-50">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-100">
-          <div className="bg-primary p-2 rounded-xl text-white shadow-lg shadow-primary/20"><Scissors size={24} /></div>
-          <h1 className="text-xl font-extrabold tracking-tight">Beleza & Gestão</h1>
+      <nav className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark flex-col z-50 transition-colors">
+        <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-border-dark">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary p-2 rounded-xl text-white shadow-lg shadow-primary/20"><Scissors size={24} /></div>
+            <h1 className="text-xl font-extrabold tracking-tight dark:text-white">Beleza & Gestão</h1>
+          </div>
+          <button 
+            onClick={toggleDarkMode}
+            className="p-2 hover:bg-slate-100 dark:hover:bg-background-dark rounded-xl transition-colors text-slate-500 dark:text-text-dark-secondary"
+          >
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
         </div>
         
         <div className="flex-1 px-4 py-8 flex flex-col gap-2">
@@ -76,7 +98,7 @@ const Navigation = ({ activeTab, setActiveTab, onNewRecord }: { activeTab: strin
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === tab.id ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+              className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === tab.id ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-background-dark hover:text-slate-900 dark:hover:text-white'}`}
             >
               <tab.icon size={20} fill={activeTab === tab.id ? 'currentColor' : 'none'} />
               <span>{tab.label}</span>
@@ -84,7 +106,7 @@ const Navigation = ({ activeTab, setActiveTab, onNewRecord }: { activeTab: strin
           ))}
         </div>
 
-        <div className="p-6 border-t border-slate-100">
+        <div className="p-6 border-t border-slate-100 dark:border-border-dark">
           <button 
             onClick={onNewRecord}
             className="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
@@ -95,98 +117,79 @@ const Navigation = ({ activeTab, setActiveTab, onNewRecord }: { activeTab: strin
       </nav>
     </>
   );
-};
-
-const NewRecordModal = ({ isOpen, onClose, user, onSave, initialType = 'appointment', showTabs = true }: { isOpen: boolean, onClose: () => void, user: User, onSave: () => void, initialType?: 'appointment' | 'client' | 'service', showTabs?: boolean }) => {
+};const NewRecordModal = ({ 
+  isOpen, 
+  onClose, 
+  user, 
+  onSave, 
+  initialType = 'appointment', 
+  showTabs = true,
+  isDarkMode
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  user: User | null, 
+  onSave: () => void,
+  initialType?: 'appointment' | 'client' | 'service',
+  showTabs?: boolean,
+  isDarkMode: boolean
+}) => {
   const [type, setType] = useState<'appointment' | 'client' | 'service'>(initialType);
+  const [loading, setLoading] = useState(false);
+  
+  // Appointment form
+  const [clientName, setClientName] = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('10:00');
+  const [services, setServices] = useState<Service[]>([]);
+
+  // Client form
+  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' });
+  
+  // Service form
+  const [newService, setNewService] = useState({ name: '', price: '', duration: '60', category: 'Cabelo' });
 
   useEffect(() => {
     if (isOpen) {
       setType(initialType);
+      supabase.from('services').select('*').then(({ data }) => setServices(data || []));
     }
   }, [isOpen, initialType]);
-  const [loading, setLoading] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
 
-  // Form states
-  const initialFormState = {
-    client_id: '',
-    service_id: '',
-    date: new Date().toISOString().split('T')[0],
-    time: '09:00',
-    professional_name: 'Juliana Moraes',
-    client_name: '',
-    client_phone: '',
-    service_name: '',
-    service_price: '',
-    service_duration: '60',
-    service_category: 'Cabelo'
-  };
-
-  const [formData, setFormData] = useState(initialFormState);
-
-  useEffect(() => {
-    if (isOpen) {
-      setFormData(initialFormState);
-      if (type === 'appointment') {
-        supabase.from('clients').select('*').order('name').then(({ data }) => setClients(data || []));
-        supabase.from('services').select('*').order('name').then(({ data }) => setServices(data || []));
-      }
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && type === 'appointment') {
-      supabase.from('clients').select('*').order('name').then(({ data }) => setClients(data || []));
-      supabase.from('services').select('*').order('name').then(({ data }) => setServices(data || []));
-    }
-  }, [type]);
-
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    if (numbers.length <= 2) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 2)} ${numbers.slice(2)}`;
-    return `${numbers.slice(0, 2)} ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhone(e.target.value);
-    setFormData({ ...formData, client_phone: formatted });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user) return;
     setLoading(true);
-
     try {
       if (type === 'appointment') {
-        const { error } = await supabase.from('appointments').insert([{
+        const { data: clientData } = await supabase.from('clients').select('id').eq('name', clientName).single();
+        let cid = clientData?.id;
+        
+        if (!cid) {
+          const { data: newC } = await supabase.from('clients').insert({ name: clientName, user_id: user.id }).select().single();
+          cid = newC?.id;
+        }
+
+        const { error } = await supabase.from('appointments').insert({
           user_id: user.id,
-          client_id: formData.client_id,
-          service_id: formData.service_id,
-          date: formData.date,
-          time: formData.time,
-          professional_name: formData.professional_name,
+          client_id: cid,
+          service_id: serviceId,
+          date,
+          time,
           status: 'pending'
-        }]);
+        });
         if (error) throw error;
       } else if (type === 'client') {
-        const { error } = await supabase.from('clients').insert([{
-          user_id: user.id,
-          name: formData.client_name,
-          phone: formData.client_phone,
-          status: 'active'
-        }]);
+        const { error } = await supabase.from('clients').insert({ ...newClient, user_id: user.id });
         if (error) throw error;
       } else if (type === 'service') {
-        const { error } = await supabase.from('services').insert([{
+        const { error } = await supabase.from('services').insert({ 
+          ...newService, 
           user_id: user.id,
-          name: formData.service_name,
-          price: parseFloat(formData.service_price),
-          duration: parseInt(formData.service_duration),
-          category: formData.service_category
-        }]);
+          price: parseFloat(newService.price),
+          duration: parseInt(newService.duration)
+        });
         if (error) throw error;
       }
       onSave();
@@ -201,179 +204,150 @@ const NewRecordModal = ({ isOpen, onClose, user, onSave, initialType = 'appointm
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose}></div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+      />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white w-full max-w-lg rounded-3xl shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-lg bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden transition-colors flex flex-col max-h-[90vh]"
       >
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="text-xl font-bold">
-            {!showTabs ? (type === 'service' ? 'Novo Serviço' : type === 'client' ? 'Nova Cliente' : 'Novo Agendamento') : 'Novo Registro'}
+        <div className="p-6 md:p-8 flex justify-between items-center bg-white dark:bg-surface-dark z-10">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+            {type === 'appointment' ? 'Novo Agendamento' : type === 'client' ? 'Nova Cliente' : 'Novo Serviço'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><Plus className="rotate-45" size={24} /></button>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-background-dark rounded-xl transition-colors dark:text-slate-400">
+            <Plus size={24} className="rotate-45" />
+          </button>
         </div>
 
-        {showTabs && (
-          <div className="flex p-4 gap-2 bg-slate-50 border-b border-slate-100">
-            {(['appointment', 'client', 'service'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setType(t)}
-                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
-                  type === t ? 'bg-primary text-white shadow-md' : 'bg-white text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                {t === 'appointment' ? 'Agendamento' : t === 'client' ? 'Cliente' : 'Serviço'}
-              </button>
-            ))}
+        <div className="px-6 md:px-8 pb-8 overflow-y-auto no-scrollbar">
+          {showTabs && (
+            <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-background-dark rounded-2xl mb-8">
+              {[
+                { id: 'appointment', label: 'Agenda', icon: Calendar },
+                { id: 'client', label: 'Cliente', icon: Users },
+                { id: 'service', label: 'Serviço', icon: Scissors },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setType(t.id as any)}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${
+                    type === t.id ? 'bg-white dark:bg-surface-dark text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  <t.icon size={16} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {type === 'appointment' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Cliente</label>
+                  <input 
+                    type="text" 
+                    placeholder="Nome da cliente" 
+                    value={clientName}
+                    onChange={e => setClientName(e.target.value)}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Data</label>
+                    <input 
+                      type="date" 
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Horário</label>
+                    <input 
+                      type="time" 
+                      value={time}
+                      onChange={e => setTime(e.target.value)}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Serviço</label>
+                  <select 
+                    value={serviceId}
+                    onChange={e => setServiceId(e.target.value)}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  >
+                    <option value="">Selecione um serviço</option>
+                    {services.map(s => <option key={s.id} value={s.id}>{s.name} - R$ {s.price}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {type === 'client' && (
+              <div className="space-y-4">
+                <input 
+                  placeholder="Nome completo" 
+                  value={newClient.name}
+                  onChange={e => setNewClient({...newClient, name: e.target.value})}
+                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                />
+                <input 
+                  placeholder="WhatsApp / Telefone" 
+                  value={newClient.phone}
+                  onChange={e => setNewClient({...newClient, phone: e.target.value})}
+                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                />
+              </div>
+            )}
+
+            {type === 'service' && (
+              <div className="space-y-4">
+                <input 
+                  placeholder="Nome do serviço" 
+                  value={newService.name}
+                  onChange={e => setNewService({...newService, name: e.target.value})}
+                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <input 
+                    placeholder="Preço (R$)" 
+                    type="number"
+                    value={newService.price}
+                    onChange={e => setNewService({...newService, price: e.target.value})}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  />
+                  <input 
+                    placeholder="Duração (min)" 
+                    type="number"
+                    value={newService.duration}
+                    onChange={e => setNewService({...newService, duration: e.target.value})}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
-          {type === 'appointment' && (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Cliente</label>
-                <select 
-                  className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                  value={formData.client_id}
-                  onChange={e => setFormData({ ...formData, client_id: e.target.value })}
-                  required
-                >
-                  <option value="">Selecione uma cliente</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Serviço</label>
-                <select 
-                  className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                  value={formData.service_id}
-                  onChange={e => setFormData({ ...formData, service_id: e.target.value })}
-                  required
-                >
-                  <option value="">Selecione um serviço</option>
-                  {services.map(s => <option key={s.id} value={s.id}>{s.name} - R$ {s.price}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
-                  <input 
-                    type="date" 
-                    className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                    value={formData.date}
-                    onChange={e => setFormData({ ...formData, date: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Horário</label>
-                  <input 
-                    type="time" 
-                    className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                    value={formData.time}
-                    onChange={e => setFormData({ ...formData, time: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {type === 'client' && (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nome Completo</label>
-                <input 
-                  type="text" 
-                  placeholder="Nome da cliente"
-                  className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                  value={formData.client_name}
-                  onChange={e => setFormData({ ...formData, client_name: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">WhatsApp / Telefone</label>
-                <input 
-                  type="tel" 
-                  placeholder="00 00000-0000"
-                  maxLength={13}
-                  className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                  value={formData.client_phone}
-                  onChange={handlePhoneChange}
-                />
-              </div>
-            </>
-          )}
-
-          {type === 'service' && (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nome do Serviço</label>
-                <input 
-                  type="text" 
-                  placeholder="ex: Corte Feminino"
-                  className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                  value={formData.service_name}
-                  onChange={e => setFormData({ ...formData, service_name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Preço (R$)</label>
-                  <input 
-                    type="number" 
-                    placeholder="0.00"
-                    step="0.01"
-                    className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                    value={formData.service_price}
-                    onChange={e => setFormData({ ...formData, service_price: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Duração (min)</label>
-                  <input 
-                    type="number" 
-                    placeholder="60"
-                    className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                    value={formData.service_duration}
-                    onChange={e => setFormData({ ...formData, service_duration: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoria</label>
-                <select 
-                  className="w-full h-12 px-4 rounded-xl border border-slate-200 outline-none focus:border-primary"
-                  value={formData.service_category}
-                  onChange={e => setFormData({ ...formData, service_category: e.target.value })}
-                >
-                  <option value="Cabelo">Cabelo</option>
-                  <option value="Unhas">Unhas</option>
-                  <option value="Estética">Estética</option>
-                  <option value="Maquiagem">Maquiagem</option>
-                </select>
-              </div>
-            </>
-          )}
-
-          <div className="pt-4">
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-primary text-white font-bold h-14 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary/90 transition-all disabled:opacity-50"
-            >
-              {loading ? 'Salvando...' : 'Salvar Registro'}
-            </button>
-          </div>
-        </form>
+          <button 
+            onClick={handleSave}
+            disabled={loading}
+            className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-8 disabled:opacity-50 hover:bg-primary/90 transition-all"
+          >
+            {loading ? 'Salvando...' : 'Confirmar e Salvar'}
+          </button>
+        </div>
       </motion.div>
     </div>
   );
@@ -381,7 +355,7 @@ const NewRecordModal = ({ isOpen, onClose, user, onSave, initialType = 'appointm
 
 // --- Screens ---
 
-const Dashboard = ({ user }: { user: User }) => {
+const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profile, setProfile] = useState<any>(null);
@@ -437,23 +411,23 @@ const Dashboard = ({ user }: { user: User }) => {
   return (
     <div className="pb-24">
       {/* Top Bar */}
-      <div className="flex items-center bg-white p-4 pb-2 justify-between border-b border-slate-200">
+      <div className="flex items-center bg-white dark:bg-surface-dark p-4 pb-2 justify-between border-b border-slate-200 dark:border-border-dark transition-colors">
         <div className="flex items-center">
-          <div className="size-10 rounded-full border-2 border-primary overflow-hidden bg-slate-100 flex items-center justify-center">
+          <div className="size-10 rounded-full border-2 border-primary overflow-hidden bg-slate-100 dark:bg-background-dark flex items-center justify-center">
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="Avatar" referrerPolicy="no-referrer" />
             ) : (
-              <UserCircle className="text-slate-400" size={32} />
+              <UserCircle className="text-slate-400 dark:text-slate-500" size={32} />
             )}
           </div>
           <div className="ml-3">
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Bem-vinda{profile?.salon_name ? ` ao ${profile.salon_name}` : ''},</p>
-            <h2 className="text-slate-900 text-lg font-bold">{profile?.full_name || user.email?.split('@')[0]}</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider">Bem-vinda{profile?.salon_name ? ` ao ${profile.salon_name}` : ''},</p>
+            <h2 className="text-slate-900 dark:text-white text-lg font-bold">{profile?.full_name || user.email?.split('@')[0]}</h2>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-2 bg-slate-100 rounded-xl text-slate-700"><Search size={20} /></button>
-          <button className="p-2 bg-slate-100 rounded-xl text-slate-700 relative">
+          <button className="p-2 bg-slate-100 dark:bg-background-dark rounded-xl text-slate-700 dark:text-white"><Search size={20} /></button>
+          <button className="p-2 bg-slate-100 dark:bg-background-dark rounded-xl text-slate-700 dark:text-white relative">
             <Bell size={20} />
             <span className="absolute top-2 right-2 size-2 bg-primary rounded-full"></span>
           </button>
@@ -462,58 +436,32 @@ const Dashboard = ({ user }: { user: User }) => {
 
       {/* Stats Grid */}
       <div className="p-4 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition-transform hover:-translate-y-1">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <TrendingUp size={18} />
-            <p className="text-slate-600 text-sm font-medium">Faturamento</p>
+        {[
+          { label: 'Faturamento', value: `R$ ${stats?.revenue.toFixed(2) || '0.00'}`, icon: TrendingUp, trend: '+12.5%' },
+          { label: 'Agendados', value: `${stats?.appointmentsToday} Serviços`, icon: Calendar, trend: '+4 novos' },
+          { label: 'Clientes Ativos', value: stats?.totalClients, icon: Users, trend: '+28 este mês' },
+          { label: 'Ticket Médio', value: `R$ ${((stats?.revenue || 0) / (stats?.appointmentsToday || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: BarChart3, trend: '+5.2%' },
+        ].map((item, i) => (
+          <div key={i} className="bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-slate-100 dark:border-border-dark transition-all hover:-translate-y-1">
+            <div className="flex items-center gap-2 text-primary mb-1">
+              <item.icon size={18} />
+              <p className="text-slate-600 dark:text-slate-400 text-sm font-medium">{item.label}</p>
+            </div>
+            <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white leading-none whitespace-nowrap">{item.value}</h3>
+            <div className="flex items-center gap-1 mt-1">
+              <TrendingUp size={12} className="text-emerald-500" />
+              <p className="text-emerald-500 text-[10px] font-bold">{item.trend}</p>
+            </div>
           </div>
-          <h3 className="text-2xl font-extrabold text-slate-900 leading-none">R$ {stats?.revenue.toFixed(2) || '0.00'}</h3>
-          <div className="flex items-center gap-1 mt-1">
-            <TrendingUp size={12} className="text-emerald-500" />
-            <p className="text-emerald-500 text-[10px] font-bold">+12.5%</p>
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition-transform hover:-translate-y-1">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <Calendar size={18} />
-            <p className="text-slate-600 text-sm font-medium">Agendados</p>
-          </div>
-          <p className="text-slate-900 text-xl md:text-2xl font-extrabold">{stats?.appointmentsToday} Serviços</p>
-          <div className="flex items-center gap-1 mt-1">
-            <TrendingUp size={12} className="text-emerald-500" />
-            <p className="text-emerald-500 text-[10px] font-bold">+4 novos</p>
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition-transform hover:-translate-y-1">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <Users size={18} />
-            <p className="text-slate-600 text-sm font-medium">Clientes Ativos</p>
-          </div>
-          <p className="text-slate-900 text-xl md:text-2xl font-extrabold">{stats?.totalClients}</p>
-          <div className="flex items-center gap-1 mt-1">
-            <TrendingUp size={12} className="text-emerald-500" />
-            <p className="text-emerald-500 text-[10px] font-bold">+28 este mês</p>
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition-transform hover:-translate-y-1">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <BarChart3 size={18} />
-            <p className="text-slate-600 text-sm font-medium">Ticket Médio</p>
-          </div>
-          <p className="text-slate-900 text-xl md:text-2xl font-extrabold">R$ {((stats?.revenue || 0) / (stats?.appointmentsToday || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-          <div className="flex items-center gap-1 mt-1">
-            <TrendingUp size={12} className="text-emerald-500" />
-            <p className="text-emerald-500 text-[10px] font-bold">+5.2%</p>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Chart Placeholder */}
       <div className="px-4 py-2">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-slate-100 dark:border-border-dark transition-colors">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-slate-900 text-base font-bold">Desempenho Semanal</h3>
-            <span className="text-slate-400 text-[10px] font-bold uppercase">Últimos 7 dias</span>
+            <h3 className="text-slate-900 dark:text-white text-base font-bold">Desempenho Semanal</h3>
+            <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase">Últimos 7 dias</span>
           </div>
           <div className="flex items-end justify-between h-32 px-1">
             {[65, 80, 100, 50, 90, 40, 30].map((height, i) => (
@@ -522,7 +470,7 @@ const Dashboard = ({ user }: { user: User }) => {
                   className={`w-full rounded-t-full ${height === 100 ? 'bg-primary' : 'bg-primary/20'}`} 
                   style={{ height: `${height}%` }}
                 ></div>
-                <span className="text-[10px] font-bold text-slate-400">
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
                   {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'][i]}
                 </span>
               </div>
@@ -533,24 +481,24 @@ const Dashboard = ({ user }: { user: User }) => {
 
       {/* Appointments List */}
       <div className="px-4 md:px-8 pt-6 pb-2 flex justify-between items-center">
-        <h2 className="text-slate-900 text-lg md:text-xl font-bold">Próximos de Hoje</h2>
-        <button className="text-primary text-sm font-bold hover:underline">Ver todos</button>
+        <h2 className="text-slate-900 dark:text-white text-lg md:text-xl font-bold">Próximos de Hoje</h2>
+        <button className="text-primary text-sm font-bold hover:underline transition-colors">Ver todos</button>
       </div>
       <div className="px-4 md:px-8 space-y-3 md:space-y-4 mb-8">
         {appointments.slice(0, 3).map((apt) => (
-          <div key={apt.id} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm transition-shadow hover:shadow-md">
-            <div className="flex items-center md:flex-col md:justify-center min-w-[50px] md:border-r border-slate-100 md:pr-4 gap-4 md:gap-0">
-              <p className="text-slate-900 font-bold text-base md:text-lg">{apt.time}</p>
-              <p className="text-slate-400 text-[10px] font-bold uppercase hidden md:block">Hoje</p>
+          <div key={apt.id} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md">
+            <div className="flex items-center md:flex-col md:justify-center min-w-[50px] md:border-r border-slate-100 dark:border-border-dark md:pr-4 gap-4 md:gap-0">
+              <p className="text-slate-900 dark:text-white font-bold text-base md:text-lg">{apt.time}</p>
+              <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase hidden md:block">Hoje</p>
             </div>
-            <div className="flex-1 border-t border-slate-50 pt-3 md:border-0 md:pt-0">
-              <p className="text-slate-900 font-bold text-sm md:text-base">{apt.service_name}</p>
-              <p className="text-slate-500 text-xs md:text-sm">{apt.client_name} • {apt.professional_name}</p>
+            <div className="flex-1 border-t border-slate-50 dark:border-border-dark pt-3 md:border-0 md:pt-0">
+              <p className="text-slate-900 dark:text-white font-bold text-sm md:text-base">{apt.service_name}</p>
+              <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm">{apt.client_name} • {apt.professional_name}</p>
             </div>
             <div className="flex justify-between items-center md:flex-col md:items-end mt-2 md:mt-0">
               <p className="text-primary font-bold text-sm md:text-base">R$ {apt.price}</p>
               <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
-                apt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
+                apt.status === 'confirmed' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
               }`}>
                 {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
               </span>
@@ -562,14 +510,24 @@ const Dashboard = ({ user }: { user: User }) => {
   );
 };
 
-const SettingsScreen = ({ user, onUpdate }: { user: User, onUpdate: () => void }) => {
+const SettingsScreen = ({ 
+  user, 
+  onUpdate, 
+  isDarkMode, 
+  toggleDarkMode 
+}: { 
+  user: User, 
+  onUpdate: () => void,
+  isDarkMode: boolean,
+  toggleDarkMode: () => void
+}) => {
   const [profile, setProfile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => setProfile(data));
-  }, [user.id, user.id]); // Added an extra dependency to force refetch on update
+  }, [user.id]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
@@ -608,16 +566,16 @@ const SettingsScreen = ({ user, onUpdate }: { user: User, onUpdate: () => void }
 
   return (
     <div className="p-6 md:p-12 mb-24 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-extrabold mb-8">Ajustes da Conta</h1>
+      <h1 className="text-3xl font-extrabold mb-8 dark:text-white">Ajustes da Conta</h1>
       
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-8 flex flex-col items-center border-b border-slate-50">
+      <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-sm border border-slate-100 dark:border-border-dark overflow-hidden transition-colors">
+        <div className="p-8 flex flex-col items-center border-b border-slate-50 dark:border-border-dark">
           <div className="relative group">
-            <div className="size-32 rounded-full border-4 border-primary/10 overflow-hidden bg-slate-100 flex items-center justify-center">
+            <div className="size-32 rounded-full border-4 border-primary/10 overflow-hidden bg-slate-100 dark:bg-background-dark flex items-center justify-center">
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <UserCircle className="text-slate-300" size={80} />
+                <UserCircle className="text-slate-300 dark:text-slate-600" size={80} />
               )}
             </div>
             <button 
@@ -635,24 +593,42 @@ const SettingsScreen = ({ user, onUpdate }: { user: User, onUpdate: () => void }
               className="hidden" 
             />
           </div>
-          <h2 className="mt-4 text-xl font-bold text-slate-900">{profile?.full_name}</h2>
-          <p className="text-slate-500 text-sm">{user.email}</p>
+          <h2 className="mt-4 text-xl font-bold text-slate-900 dark:text-white">{profile?.full_name}</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">{user.email}</p>
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50">
+          <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-background-dark transition-colors">
             <div className="flex items-center gap-3">
-              <div className="size-10 bg-white rounded-xl flex items-center justify-center text-slate-600 shadow-sm"><Home size={20} /></div>
+              <div className="size-10 bg-white dark:bg-surface-dark rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-sm"><Home size={20} /></div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Salão</p>
-                <p className="font-bold text-slate-700">{profile?.salon_name || 'Não configurado'}</p>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Salão</p>
+                <p className="font-bold text-slate-700 dark:text-white">{profile?.salon_name || 'Não configurado'}</p>
               </div>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-background-dark transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="size-10 bg-white dark:bg-surface-dark rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-sm">
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Aparência</p>
+                <p className="font-bold text-slate-700 dark:text-white">{isDarkMode ? 'Modo Escuro' : 'Modo Claro'}</p>
+              </div>
+            </div>
+            <button 
+              onClick={toggleDarkMode}
+              className={`w-14 h-8 flex items-center rounded-full p-1 transition-colors duration-300 ${isDarkMode ? 'bg-primary' : 'bg-slate-300'}`}
+            >
+              <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ${isDarkMode ? 'translate-x-6' : ''}`}></div>
+            </button>
           </div>
           
           <button 
             onClick={() => supabase.auth.signOut()}
-            className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 text-red-600 font-bold hover:bg-red-100 transition-colors"
+            className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 font-bold hover:bg-red-100 dark:hover:bg-red-500/20 transition-all mt-4"
           >
             <LogOut size={20} />
             Sair da Conta
@@ -663,45 +639,43 @@ const SettingsScreen = ({ user, onUpdate }: { user: User, onUpdate: () => void }
   );
 };
 
-const Agenda = () => {
+const Agenda = ({ isDarkMode }: { isDarkMode: boolean }) => {
+  const [filter, setFilter] = useState('Confirmados');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [filter, setFilter] = useState('Todos');
+  const tabs = ['Pendentes', 'Confirmados', 'Cancelados'];
 
   useEffect(() => {
-    supabase.from('appointments').select(`
-      *,
-      client:client_id(name),
-      service:service_id(name, price)
-    `).then(({ data }) => {
-      if (data) {
-        setAppointments(data.map(apt => ({
-          ...apt,
-          client_name: (apt.client as any)?.name,
-          service_name: (apt.service as any)?.name,
-          price: (apt.service as any)?.price
-        })));
-      }
-    });
+    supabase
+      .from('appointments')
+      .select('*, client:client_id(name), service:service_id(name, price)')
+      .order('time')
+      .then(({ data }) => {
+        if (data) {
+          setAppointments(data.map(apt => ({
+            ...apt,
+            client_name: (apt.client as any)?.name,
+            service_name: (apt.service as any)?.name
+          })));
+        }
+      });
   }, []);
-
-  const tabs = ['Todos', 'Pendentes', 'Confirmados', 'Concluídos'];
 
   return (
     <div className="pb-24 md:pb-8">
-      <header className="sticky top-0 z-10 bg-white/80 md:bg-white backdrop-blur-md rounded-t-2xl md:rounded-xl">
+      <header className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 md:bg-white md:dark:bg-surface-dark backdrop-blur-md rounded-t-2xl md:rounded-xl transition-colors">
         <div className="flex items-center p-4 pb-2 justify-between">
-          <button className="p-2 md:hidden"><MoreVertical size={24} /></button>
-          <h2 className="text-lg md:text-2xl font-bold md:pl-4">Agendamentos</h2>
-          <button className="p-2"><Search size={24} /></button>
+          <button className="p-2 md:hidden text-slate-500 dark:text-slate-400"><MoreVertical size={24} /></button>
+          <h2 className="text-lg md:text-2xl font-bold md:pl-4 dark:text-white">Agendamentos</h2>
+          <button className="p-2 text-slate-500 dark:text-slate-400"><Search size={24} /></button>
         </div>
         <div className="px-4 md:px-8 pb-3">
-          <div className="flex border-b border-slate-200 gap-6 overflow-x-auto no-scrollbar">
+          <div className="flex border-b border-slate-200 dark:border-border-dark gap-6 overflow-x-auto no-scrollbar">
             {tabs.map(tab => (
               <button
                 key={tab}
                 onClick={() => setFilter(tab)}
                 className={`pb-3 pt-2 shrink-0 text-sm font-bold transition-colors border-b-2 ${
-                  filter === tab ? 'border-primary text-primary' : 'border-transparent text-slate-500'
+                  filter === tab ? 'border-primary text-primary' : 'border-transparent text-slate-500 dark:text-slate-400'
                 }`}
               >
                 {tab}
@@ -713,29 +687,29 @@ const Agenda = () => {
 
       <main className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-extrabold">Hoje, 24 de Outubro</h3>
-          <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-1 rounded-full uppercase">3 Horários</span>
+          <h3 className="text-lg font-extrabold dark:text-white">Hoje, 13 de Março</h3>
+          <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-1 rounded-full uppercase">{appointments.length} Horários</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {appointments.map(apt => (
-            <div key={apt.id} className="flex flex-col gap-4 bg-white p-5 rounded-xl border border-slate-100 shadow-sm transition-transform hover:-translate-y-1">
-              <div className="flex items-center gap-4 border-b border-slate-50 pb-4">
+            <div key={apt.id} className="flex flex-col gap-4 bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:-translate-y-1">
+              <div className="flex items-center gap-4 border-b border-slate-50 dark:border-border-dark pb-4">
                 <div className="size-14 rounded-full border-2 border-primary/20 overflow-hidden shrink-0">
                   <img src={`https://picsum.photos/seed/${apt.client_name}/100/100`} alt={apt.client_name} referrerPolicy="no-referrer" />
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
-                    <p className="text-base font-bold leading-tight mb-1 line-clamp-1">{apt.client_name}</p>
+                    <p className="text-base font-bold leading-tight mb-1 line-clamp-1 dark:text-white">{apt.client_name}</p>
                     <span className={`size-3 rounded-full shrink-0 ${
                       apt.status === 'confirmed' ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : 'bg-amber-500 shadow-sm shadow-amber-500/40'
                     }`}></span>
                   </div>
-                  <p className="text-slate-500 text-xs font-medium bg-slate-50 inline-block px-2 py-1 rounded-md">{apt.time} — {apt.time} (45m)</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs font-medium bg-slate-50 dark:bg-background-dark inline-block px-2 py-1 rounded-md">{apt.time} — {apt.time} (45m)</p>
                 </div>
               </div>
               <div>
                 <p className="text-primary text-sm font-bold mb-1">{apt.service_name}</p>
-                <p className="text-slate-500 text-xs">{apt.professional_name}</p>
+                <p className="text-slate-500 dark:text-slate-400 text-xs">{apt.professional_name}</p>
               </div>
             </div>
           ))}
@@ -745,24 +719,23 @@ const Agenda = () => {
   );
 };
 
-const Services = ({ onAdd }: { onAdd: () => void }) => {
+const Services = ({ onAdd, isDarkMode }: { onAdd: () => void, isDarkMode: boolean }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [category, setCategory] = useState('Cabelo');
+  const categories = ['Cabelo', 'Unhas', 'Estética', 'Maquiagem'];
 
   useEffect(() => {
     supabase.from('services').select('*').order('category').then(({ data }) => setServices(data || []));
   }, []);
 
-  const categories = ['Cabelo', 'Unhas', 'Estética', 'Maquiagem'];
-
   return (
     <div className="pb-24 md:pb-8">
-      <header className="bg-white sticky top-0 z-10 border-b border-primary/10 rounded-t-2xl md:rounded-xl">
+      <header className="bg-white dark:bg-surface-dark sticky top-0 z-10 border-b border-primary/10 dark:border-border-dark rounded-t-2xl md:rounded-xl transition-colors">
         <div className="flex items-center p-4 justify-between md:px-8">
           <button className="size-10 flex items-center justify-center rounded-full bg-primary/10 text-primary md:hidden">
             <ArrowLeft size={20} />
           </button>
-          <h1 className="text-xl md:text-2xl font-extrabold flex-1 md:flex-none px-4 md:px-0">Catálogo de Serviços</h1>
+          <h1 className="text-xl md:text-2xl font-extrabold flex-1 md:flex-none px-4 md:px-0 dark:text-white">Catálogo de Serviços</h1>
           <button 
             onClick={onAdd}
             className="size-10 flex items-center justify-center rounded-full bg-primary text-white shadow-lg md:ml-auto md:w-auto md:px-4 md:gap-2 hover:scale-105 transition-transform"
@@ -771,13 +744,13 @@ const Services = ({ onAdd }: { onAdd: () => void }) => {
           </button>
         </div>
         <div className="px-4 md:px-8 overflow-x-auto no-scrollbar">
-          <div className="flex gap-6 border-b border-primary/5">
+          <div className="flex gap-6 border-b border-primary/5 dark:border-border-dark">
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
                 className={`pb-3 pt-4 text-sm font-bold whitespace-nowrap transition-colors border-b-2 ${
-                  category === cat ? 'border-primary text-primary' : 'border-transparent text-slate-500'
+                  category === cat ? 'border-primary text-primary' : 'border-transparent text-slate-500 dark:text-slate-400'
                 }`}
               >
                 {cat}
@@ -789,21 +762,21 @@ const Services = ({ onAdd }: { onAdd: () => void }) => {
 
       <main className="p-4 space-y-6">
         <div className="relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
             <Search size={18} />
           </div>
           <input 
             type="text" 
             placeholder="Buscar por serviço ou preço..." 
-            className="w-full h-12 pl-12 pr-4 bg-white rounded-xl border border-primary/10 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-surface-dark rounded-xl border border-primary/10 dark:border-border-dark focus:ring-2 focus:ring-primary/20 outline-none text-sm dark:text-white"
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mt-6">
-          <h3 className="text-lg font-bold md:col-span-full">{category} <span className="text-sm font-normal text-slate-500 ml-2">({services.filter(s => s.category === category).length} serviços)</span></h3>
+          <h3 className="text-lg font-bold md:col-span-full dark:text-white">{category} <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-2">({services.filter(s => s.category === category).length} serviços)</span></h3>
           {services.filter(s => s.category === category).map(service => (
-            <div key={service.id} className="bg-white p-5 rounded-xl border border-primary/5 shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md flex items-center gap-4">
-              <div className="h-16 w-16 md:h-20 md:w-20 rounded-lg bg-primary/5 overflow-hidden flex items-center justify-center shrink-0">
+            <div key={service.id} className="bg-white dark:bg-surface-dark p-5 rounded-xl border border-primary/5 dark:border-border-dark shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md flex items-center gap-4 transition-colors">
+              <div className="h-16 w-16 md:h-20 md:w-20 rounded-lg bg-primary/5 dark:bg-background-dark overflow-hidden flex items-center justify-center shrink-0">
                 {service.image_url ? (
                   <img src={service.image_url} alt={service.name} className="object-cover w-full h-full" referrerPolicy="no-referrer" />
                 ) : (
@@ -811,15 +784,15 @@ const Services = ({ onAdd }: { onAdd: () => void }) => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-base md:text-lg truncate">{service.name}</h4>
+                <h4 className="font-bold text-base md:text-lg truncate dark:text-white">{service.name}</h4>
                 <div className="flex items-center gap-3 mt-2">
-                  <span className="flex items-center text-xs md:text-sm text-slate-500 bg-slate-50 px-2 py-1 rounded-md">
+                  <span className="flex items-center text-xs md:text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-background-dark px-2 py-1 rounded-md">
                     <Clock size={14} className="mr-1" /> {service.duration} min
                   </span>
                   <span className="text-primary font-bold text-sm md:text-md">R$ {service.price.toFixed(2)}</span>
                 </div>
               </div>
-              <button className="p-2 md:p-3 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors">
+              <button className="p-2 md:p-3 text-slate-300 dark:text-slate-600 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors">
                 <Settings size={20} />
               </button>
             </div>
@@ -830,7 +803,7 @@ const Services = ({ onAdd }: { onAdd: () => void }) => {
   );
 };
 
-const Clients = ({ onAdd }: { onAdd: () => void }) => {
+const Clients = ({ onAdd, isDarkMode }: { onAdd: () => void, isDarkMode: boolean }) => {
   const [clients, setClients] = useState<Client[]>([]);
 
   useEffect(() => {
@@ -839,13 +812,13 @@ const Clients = ({ onAdd }: { onAdd: () => void }) => {
 
   return (
     <div className="pb-24 md:pb-8">
-      <header className="sticky top-0 z-10 bg-white/80 md:bg-white backdrop-blur-md border-b border-primary/10 rounded-t-2xl md:rounded-xl">
+      <header className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 md:bg-white md:dark:bg-surface-dark backdrop-blur-md border-b border-primary/10 rounded-t-2xl md:rounded-xl transition-colors">
         <div className="px-4 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg text-primary">
               <Sparkles size={20} />
             </div>
-            <h1 className="text-xl md:text-2xl font-bold">Gestão de Clientes</h1>
+            <h1 className="text-xl md:text-2xl font-bold dark:text-white">Gestão de Clientes</h1>
           </div>
           <button 
             onClick={onAdd}
@@ -858,44 +831,44 @@ const Clients = ({ onAdd }: { onAdd: () => void }) => {
 
       <main className="p-4 md:p-8">
         <div className="relative mb-6 md:mb-8">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
           <input 
             type="text" 
             placeholder="Buscar por nome, telefone ou CPF..." 
-            className="w-full pl-12 pr-4 py-3 md:py-4 bg-white border-none rounded-xl shadow-sm focus:ring-2 focus:ring-primary/50 transition-all text-sm md:text-base ring-1 ring-slate-100"
+            className="w-full pl-12 pr-4 py-3 md:py-4 bg-white dark:bg-surface-dark border-none rounded-xl shadow-sm focus:ring-2 focus:ring-primary/50 transition-all text-sm md:text-base ring-1 ring-slate-100 dark:ring-border-dark dark:text-white"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-primary/5">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total</p>
+          <div className="bg-white dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-primary/5 dark:border-border-dark transition-colors">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total</p>
             <p className="text-2xl font-bold text-primary">{clients.length}</p>
           </div>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-primary/5">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Ativas</p>
-            <p className="text-2xl font-bold text-slate-800">{clients.filter(c => c.status === 'active').length}</p>
+          <div className="bg-white dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-primary/5 dark:border-border-dark transition-colors">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Ativas</p>
+            <p className="text-2xl font-bold text-slate-800 dark:text-white">{clients.filter(c => c.status === 'active').length}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {clients.map(client => (
-            <div key={client.id} className="flex items-center gap-4 bg-white p-5 rounded-xl shadow-sm border border-transparent hover:border-primary/20 hover:shadow-md transition-all cursor-pointer group">
+            <div key={client.id} className="flex items-center gap-4 bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-transparent hover:border-primary/20 hover:shadow-md transition-all cursor-pointer group transition-colors">
               <div className="relative shrink-0">
                 <div className="size-16 md:size-14 rounded-full border-2 border-primary/10 overflow-hidden">
                   <img src={`https://picsum.photos/seed/${client.name}/100/100`} alt={client.name} referrerPolicy="no-referrer" />
                 </div>
                 {client.status === 'active' && (
-                  <span className="absolute bottom-0 right-0 size-4 md:size-3 bg-emerald-500 border-2 border-white rounded-full"></span>
+                  <span className="absolute bottom-0 right-0 size-4 md:size-3 bg-emerald-500 border-2 border-white dark:border-background-dark rounded-full"></span>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors text-base md:text-md truncate">{client.name}</h3>
-                <div className="flex flex-col text-xs text-slate-500 mt-1 gap-1">
+                <h3 className="font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors text-base md:text-md truncate">{client.name}</h3>
+                <div className="flex flex-col text-xs text-slate-500 dark:text-slate-400 mt-1 gap-1">
                   <span className="flex items-center gap-1"><CreditCard size={12} /> {client.phone}</span>
                   <span className="flex items-center gap-1"><Calendar size={12} /> Última: {client.last_visit}</span>
                 </div>
               </div>
-              <div className="p-2 bg-slate-50 group-hover:bg-primary/5 rounded-full text-slate-300 group-hover:text-primary transition-colors">
+              <div className="p-2 bg-slate-50 dark:bg-background-dark group-hover:bg-primary/5 rounded-full text-slate-300 dark:text-slate-600 group-hover:text-primary transition-colors">
                 <ChevronRight size={20} />
               </div>
             </div>
@@ -943,8 +916,12 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+    } else if (data.user) {
+      setStep(6); // Resume onboarding if not complete
+    }
     setLoading(false);
   };
 
@@ -1019,7 +996,7 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step < 3) {
     return (
-      <div className="min-h-screen bg-white flex flex-col overflow-hidden">
+      <div className="min-h-screen bg-white dark:bg-background-dark flex flex-col overflow-hidden transition-colors">
         <div className="flex-1 relative">
           <AnimatePresence mode="wait">
             <motion.div
@@ -1031,28 +1008,28 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
             >
               <div className="h-2/3 relative">
                 <img src={slides[step].image} className="w-full h-full object-cover" alt="Presentation" />
-                <div className="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-transparent dark:from-background-dark dark:via-background-dark/20 dark:to-transparent"></div>
               </div>
-              <div className="flex-1 p-8 text-center flex flex-col items-center justify-center -mt-20 relative z-10 bg-white rounded-t-[40px]">
+              <div className="flex-1 p-8 text-center flex flex-col items-center justify-center -mt-20 relative z-10 bg-white dark:bg-surface-dark rounded-t-[40px] transition-colors">
                 <div className="size-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-primary/5">
                   {slides[step].icon}
                 </div>
-                <h1 className="text-3xl font-extrabold text-slate-900 mb-4">{slides[step].title}</h1>
-                <p className="text-slate-500 max-w-sm leading-relaxed">{slides[step].desc}</p>
+                <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-4">{slides[step].title}</h1>
+                <p className="text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">{slides[step].desc}</p>
               </div>
             </motion.div>
           </AnimatePresence>
         </div>
-        <div className="p-8 space-y-6">
+        <div className="p-8 space-y-6 bg-white dark:bg-surface-dark transition-colors">
           <div className="flex justify-center gap-2">
             {slides.map((_, i) => (
-              <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${step === i ? 'w-8 bg-primary' : 'w-2 bg-slate-200'}`}></div>
+              <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${step === i ? 'w-8 bg-primary' : 'w-2 bg-slate-200 dark:bg-slate-700'}`}></div>
             ))}
           </div>
-          <button onClick={next} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 text-lg">
+          <button onClick={next} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 text-lg hover:scale-[1.02] transition-transform active:scale-95">
             Continuar <ArrowRight size={20} />
           </button>
-          <button onClick={() => setStep(3)} className="w-full text-slate-400 font-bold py-2">Pular</button>
+          <button onClick={() => setStep(3)} className="w-full text-slate-400 dark:text-slate-500 font-bold py-2 hover:text-primary transition-colors">Pular</button>
         </div>
       </div>
     );
@@ -1060,16 +1037,16 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step === 3) { // Auth Choice
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-background-dark flex flex-col items-center justify-center p-8 text-center transition-colors">
         <div className="size-20 bg-primary rounded-3xl flex items-center justify-center text-white mb-8 shadow-2xl shadow-primary/30 rotate-6">
           <Scissors size={40} />
         </div>
-        <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Beleza & Gestão</h1>
-        <p className="text-slate-500 mb-12 max-w-xs">O parceiro ideal para o crescimento do seu negócio.</p>
+        <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-4 tracking-tight">Beleza & Gestão</h1>
+        <p className="text-slate-500 dark:text-slate-400 mb-12 max-w-xs leading-relaxed">O parceiro ideal para o crescimento do seu negócio e gestão do seu espaço.</p>
         
-        <div className="w-full space-y-4">
-          <button onClick={() => setStep(5)} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg">Começar Agora</button>
-          <button onClick={() => setStep(4)} className="w-full bg-white text-slate-700 font-bold h-16 rounded-2xl border border-slate-200 shadow-sm text-lg">Já tenho conta</button>
+        <div className="w-full space-y-4 max-w-sm">
+          <button onClick={() => setStep(5)} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg hover:scale-[1.02] transition-transform active:scale-95">Começar Agora</button>
+          <button onClick={() => setStep(4)} className="w-full bg-white dark:bg-surface-dark text-slate-700 dark:text-white font-bold h-16 rounded-2xl border border-slate-200 dark:border-border-dark shadow-sm text-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Já tenho conta</button>
         </div>
       </div>
     );
@@ -1078,44 +1055,44 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
   if (step === 4 || step === 5) { // Login / Register
     const isLogin = step === 4;
     return (
-      <div className="min-h-screen bg-white flex flex-col p-8">
-        <button onClick={() => setStep(3)} className="size-12 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-600 mb-8 border border-slate-100"><ArrowLeft size={24} /></button>
-        <h1 className="text-4xl font-extrabold text-slate-900 mb-2">{isLogin ? 'Bem-vinda!' : 'Crie sua conta'}</h1>
-        <p className="text-slate-500 mb-10">{isLogin ? 'Falta pouco para acessar sua agenda.' : 'Preencha os dados básicos para começar.'}</p>
+      <div className="min-h-screen bg-white dark:bg-background-dark flex flex-col p-8 transition-colors">
+        <button onClick={() => setStep(3)} className="size-12 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-surface-dark text-slate-600 dark:text-slate-400 mb-8 border border-slate-100 dark:border-border-dark hover:text-primary transition-colors"><ArrowLeft size={24} /></button>
+        <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2">{isLogin ? 'Bem-vinda!' : 'Crie sua conta'}</h1>
+        <p className="text-slate-500 dark:text-slate-400 mb-10">{isLogin ? 'Falta pouco para acessar sua agenda.' : 'Preencha os dados básicos para começar.'}</p>
 
-        {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 flex items-center gap-3 text-sm font-medium"><LogOut size={16} /> {error}</div>}
+        {error && <div className="mb-6 p-4 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-2xl border border-red-100 dark:border-red-500/20 flex items-center gap-3 text-sm font-medium"><LogOut size={16} /> {error}</div>}
 
         <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase ml-1">E-mail</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">E-mail</label>
             <input 
               type="email" 
               placeholder="seu@email.com" 
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:border-primary focus:bg-white transition-all shadow-inner"
+              className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary focus:bg-white dark:focus:bg-surface-dark transition-all shadow-inner dark:text-white"
               required 
             />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase ml-1">Senha</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Senha</label>
             <input 
               type="password" 
               placeholder="••••••••" 
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:border-primary focus:bg-white transition-all shadow-inner"
+              className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary focus:bg-white dark:focus:bg-surface-dark transition-all shadow-inner dark:text-white"
               required 
             />
           </div>
-          <button type="submit" disabled={loading} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-4 disabled:opacity-50">
+          <button type="submit" disabled={loading} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-4 disabled:opacity-50 hover:bg-primary/90 transition-all">
             {loading ? 'Processando...' : (isLogin ? 'Entrar' : 'Cadastrar')}
           </button>
         </form>
         
         <button 
           onClick={() => setStep(isLogin ? 5 : 4)} 
-          className="mt-6 text-slate-500 font-bold tracking-tight"
+          className="mt-6 text-slate-500 dark:text-slate-400 font-bold tracking-tight hover:text-primary transition-colors"
         >
           {isLogin ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Entre aqui'}
         </button>
@@ -1125,45 +1102,45 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step === 6) { // Personal Info
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
-        <div className="bg-white p-8 rounded-[40px] shadow-sm flex-1 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-background-dark flex flex-col p-6 transition-colors">
+        <div className="bg-white dark:bg-surface-dark p-8 rounded-[40px] shadow-sm flex-1 flex flex-col transition-colors">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 1 de 4</h2>
             <div className="flex gap-1">
-              {[1,0,0,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+              {[1,0,0,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100 dark:bg-background-dark'}`}></div>)}
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Sobre Você</h1>
-          <p className="text-slate-500 mb-10 leading-relaxed">Conte-nos um pouco sobre a profissional por trás do sucesso.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Sobre Você</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-10 leading-relaxed">Conte-nos um pouco sobre a profissional por trás do sucesso.</p>
           
           <div className="space-y-6 flex-1">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Seu Nome Completo</label>
+              <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Seu Nome Completo</label>
               <div className="relative">
-                <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
                 <input 
                   type="text" 
                   placeholder="ex: Juliana Moraes" 
-                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 dark:border-border-dark bg-slate-50 dark:bg-background-dark focus:bg-white dark:focus:bg-slate-800 outline-none focus:border-primary transition-all dark:text-white"
                   value={profileData.full_name}
                   onChange={e => setProfileData({...profileData, full_name: e.target.value})}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Data de Nascimento</label>
+              <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Data de Nascimento</label>
               <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
                 <input 
                   type="date" 
-                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 dark:border-border-dark bg-slate-50 dark:bg-background-dark focus:bg-white dark:focus:bg-slate-800 outline-none focus:border-primary transition-all dark:text-white"
                   value={profileData.birth_date}
                   onChange={e => setProfileData({...profileData, birth_date: e.target.value})}
                 />
               </div>
             </div>
           </div>
-          <button onClick={next} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg mt-8 text-lg">Continuar</button>
+          <button onClick={next} className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg mt-8 text-lg hover:bg-primary/90 transition-all active:scale-[0.98]">Continuar</button>
         </div>
       </div>
     );
@@ -1171,39 +1148,39 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step === 7) { // Salon Info
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
-        <div className="bg-white p-8 rounded-[40px] shadow-sm flex-1 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-background-dark flex flex-col p-6 transition-colors">
+        <div className="bg-white dark:bg-surface-dark p-8 rounded-[40px] shadow-sm flex-1 flex flex-col transition-colors">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 2 de 4</h2>
             <div className="flex gap-1">
-              {[1,1,0,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+              {[1,1,0,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100 dark:bg-background-dark'}`}></div>)}
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Seu Negócio</h1>
-          <p className="text-slate-500 mb-10 leading-relaxed">Como os clientes encontrarão e identificarão seu espaço?</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Seu Negócio</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-10 leading-relaxed">Como os clientes encontrarão e identificarão seu espaço?</p>
           
           <div className="space-y-6 flex-1">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Nome do Salão / Estúdio</label>
+              <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Nome do Salão / Estúdio</label>
               <div className="relative">
-                <Home className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <Home className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
                 <input 
                   type="text" 
                   placeholder="ex: Blossom Hair & Spa" 
-                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 dark:border-border-dark bg-slate-50 dark:bg-background-dark focus:bg-white dark:focus:bg-slate-800 outline-none focus:border-primary transition-all dark:text-white"
                   value={profileData.salon_name}
                   onChange={e => setProfileData({...profileData, salon_name: e.target.value})}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Endereço Completo</label>
+              <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Endereço Completo</label>
               <div className="relative">
-                <Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
                 <input 
                   type="text" 
                   placeholder="Rua, Número, Bairro, Cidade" 
-                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white outline-none focus:border-primary"
+                  className="w-full h-14 pl-12 pr-4 rounded-2xl border border-slate-100 dark:border-border-dark bg-slate-50 dark:bg-background-dark focus:bg-white dark:focus:bg-slate-800 outline-none focus:border-primary transition-all dark:text-white"
                   value={profileData.salon_address}
                   onChange={e => setProfileData({...profileData, salon_address: e.target.value})}
                 />
@@ -1211,8 +1188,8 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
             </div>
           </div>
           <div className="flex gap-4">
-            <button onClick={back} className="px-6 bg-slate-50 text-slate-400 font-bold rounded-2xl border border-slate-100">Voltar</button>
-            <button onClick={next} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg">Próximo</button>
+            <button onClick={back} className="px-6 bg-slate-50 dark:bg-background-dark text-slate-400 dark:text-slate-500 font-bold rounded-2xl border border-slate-100 dark:border-border-dark transition-colors">Voltar</button>
+            <button onClick={next} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg hover:bg-primary/90 transition-all active:scale-[0.98]">Próximo</button>
           </div>
         </div>
       </div>
@@ -1231,24 +1208,24 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
     ];
 
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
-        <div className="bg-white p-6 rounded-[40px] shadow-sm flex-1 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-background-dark flex flex-col p-6 transition-colors">
+        <div className="bg-white dark:bg-surface-dark p-6 rounded-[40px] shadow-sm flex-1 flex flex-col transition-colors">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 3 de 4</h2>
             <div className="flex gap-1">
-              {[1,1,1,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+              {[1,1,1,0].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100 dark:bg-background-dark'}`}></div>)}
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Horários</h1>
-          <p className="text-slate-500 mb-6 leading-relaxed">Quando você está disponível para atender?</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Horários</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">Quando você está disponível para atender?</p>
           
           <div className="space-y-3 flex-1 overflow-y-auto pr-2 no-scrollbar">
             {days.map(day => {
               const d = (profileData.business_hours as any)[day.id];
               return (
-                <div key={day.id} className={`p-4 rounded-2xl border transition-all ${d.active ? 'bg-white border-primary/20 ring-1 ring-primary/5 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
+                <div key={day.id} className={`p-4 rounded-2xl border transition-all ${d.active ? 'bg-white dark:bg-slate-800 border-primary/20 ring-1 ring-primary/5 shadow-sm' : 'bg-slate-50 dark:bg-background-dark border-slate-100 dark:border-border-dark opacity-60'}`}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-slate-700">{day.label}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">{day.label}</span>
                     <button 
                       onClick={() => setProfileData({
                         ...profileData,
@@ -1257,7 +1234,7 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
                           [day.id]: { ...d, active: !d.active }
                         }
                       })}
-                      className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${d.active ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-400'}`}
+                      className={`text-[10px] font-black uppercase px-3 py-1 rounded-full transition-colors ${d.active ? 'bg-primary/10 text-primary' : 'bg-slate-200 dark:bg-background-dark text-slate-400 dark:text-slate-500'}`}
                     >
                       {d.active ? 'Aberto' : 'Fechado'}
                     </button>
@@ -1266,17 +1243,17 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
                     <div className="flex items-center gap-4">
                       <input 
                         type="time" 
-                        className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none focus:border-primary"
+                        className="bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark rounded-lg px-2 py-1 text-xs outline-none focus:border-primary dark:text-white transition-all"
                         value={d.open}
                         onChange={e => setProfileData({
                           ...profileData,
                           business_hours: { ...profileData.business_hours, [day.id]: { ...d, open: e.target.value } }
                         })}
                       />
-                      <span className="text-slate-400 text-xs font-bold">às</span>
+                      <span className="text-slate-400 dark:text-slate-600 text-xs font-bold">às</span>
                       <input 
                         type="time" 
-                        className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none focus:border-primary"
+                        className="bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark rounded-lg px-2 py-1 text-xs outline-none focus:border-primary dark:text-white transition-all"
                         value={d.close}
                         onChange={e => setProfileData({
                           ...profileData,
@@ -1290,8 +1267,8 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
             })}
           </div>
           <div className="flex gap-4 mt-6">
-            <button onClick={back} className="px-6 bg-slate-50 text-slate-400 font-bold rounded-2xl border border-slate-100">Voltar</button>
-            <button onClick={next} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg">Próximo</button>
+            <button onClick={back} className="px-6 bg-slate-50 dark:bg-background-dark text-slate-400 dark:text-slate-500 font-bold rounded-2xl border border-slate-100 dark:border-border-dark transition-colors">Voltar</button>
+            <button onClick={next} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg hover:bg-primary/90 transition-all active:scale-[0.98]">Próximo</button>
           </div>
         </div>
       </div>
@@ -1300,24 +1277,24 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
 
   if (step === 9) { // Initial Services
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col p-6">
-        <div className="bg-white p-8 rounded-[40px] shadow-sm flex-1 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-background-dark flex flex-col p-6 transition-colors">
+        <div className="bg-white dark:bg-surface-dark p-8 rounded-[40px] shadow-sm flex-1 flex flex-col transition-colors">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-primary font-black uppercase tracking-widest text-xs">Passo 4 de 4</h2>
             <div className="flex gap-1">
-              {[1,1,1,1].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100'}`}></div>)}
+              {[1,1,1,1].map((v, i) => <div key={i} className={`h-1.5 w-6 rounded-full ${v ? 'bg-primary' : 'bg-slate-100 dark:bg-background-dark'}`}></div>)}
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Serviços</h1>
-          <p className="text-slate-500 mb-10 leading-relaxed">Para começar com o pé direito, adicione seus 3 principais serviços.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Serviços</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-10 leading-relaxed">Para começar com o pé direito, adicione seus 3 principais serviços.</p>
           
-          <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+          <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar pr-1">
             {initialServices.map((service, idx) => (
-              <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-3">
+              <div key={idx} className="p-4 bg-slate-50 dark:bg-background-dark rounded-2xl border border-slate-100 dark:border-border-dark flex flex-col gap-3 transition-colors">
                 <input 
                   type="text" 
                   placeholder="Nome do serviço" 
-                  className="bg-transparent font-bold text-slate-700 outline-none border-b border-slate-200 pb-1"
+                  className="bg-transparent font-bold text-slate-700 dark:text-white outline-none border-b border-slate-200 dark:border-slate-800 pb-1 focus:border-primary transition-all"
                   value={service.name}
                   onChange={e => {
                     const newS = [...initialServices];
@@ -1327,10 +1304,10 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
                 />
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Preço (R$)</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Preço (R$)</label>
                     <input 
                       type="number" 
-                      className="w-full bg-white border border-slate-100 rounded-lg px-2 py-1 text-sm outline-none"
+                      className="w-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-border-dark rounded-xl px-3 py-2 text-sm outline-none focus:border-primary dark:text-white transition-all"
                       value={service.price}
                       onChange={e => {
                         const newS = [...initialServices];
@@ -1340,10 +1317,10 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Duração (min)</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Duração (min)</label>
                     <input 
                       type="number" 
-                      className="w-full bg-white border border-slate-100 rounded-lg px-2 py-1 text-sm outline-none"
+                      className="w-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-border-dark rounded-xl px-3 py-2 text-sm outline-none focus:border-primary dark:text-white transition-all"
                       value={service.duration}
                       onChange={e => {
                         const newS = [...initialServices];
@@ -1356,13 +1333,12 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
               </div>
             ))}
           </div>
-          <button 
-            onClick={finishOnboarding} 
-            disabled={loading}
-            className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg mt-8 text-xl shadow-primary/20 disabled:opacity-50"
-          >
-            {loading ? 'Preparando seu Espaço...' : 'Finalizar e Começar'}
-          </button>
+          <div className="flex gap-4 mt-8">
+            <button onClick={back} className="px-6 bg-slate-50 dark:bg-background-dark text-slate-400 dark:text-slate-500 font-bold rounded-2xl border border-slate-100 dark:border-border-dark transition-colors">Voltar</button>
+            <button onClick={finishOnboarding} disabled={loading} className="flex-1 bg-primary text-white font-bold h-16 rounded-2xl shadow-lg text-lg hover:bg-primary/90 transition-all disabled:opacity-50 active:scale-[0.98]">
+              {loading ? 'Finalizando...' : 'Concluir Cadastro'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1378,6 +1354,22 @@ export default function App() {
   const [modalShowTabs, setModalShowTabs] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('theme') === 'dark' || 
+           (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const openModal = (type: 'appointment' | 'client' | 'service' = 'appointment', showTabs: boolean = true) => {
     setModalType(type);
@@ -1428,9 +1420,15 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background-light font-sans antialiased md:flex">
+    <div className="min-h-screen bg-background-light dark:bg-background-dark font-sans antialiased md:flex transition-colors duration-300">
       {/* Navigation Component - Handles both mobile and desktop (sidebar) views inside */}
-      <Navigation activeTab={activeTab} setActiveTab={setActiveTab} onNewRecord={() => openModal('appointment')} />
+      <Navigation 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onNewRecord={() => openModal('appointment')} 
+        isDarkMode={isDarkMode}
+        toggleDarkMode={toggleDarkMode}
+      />
       
       {/* Main Content Area - Left margin on desktop to leave space for fixed sidebar */}
       <main className="md:ml-64 flex-1 transition-all duration-300 relative min-h-screen overflow-x-hidden">
@@ -1443,11 +1441,11 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'dashboard' && <Dashboard user={user} />}
-              {activeTab === 'agenda' && <Agenda />}
-              {activeTab === 'services' && <Services onAdd={() => openModal('service', false)} />}
-              {activeTab === 'clients' && <Clients onAdd={() => openModal('client', false)} />}
-              {activeTab === 'settings' && <SettingsScreen user={user} onUpdate={refreshData} />}
+              {activeTab === 'dashboard' && <Dashboard user={user} isDarkMode={isDarkMode} />}
+              {activeTab === 'agenda' && <Agenda isDarkMode={isDarkMode} />}
+              {activeTab === 'services' && <Services onAdd={() => openModal('service', false)} isDarkMode={isDarkMode} />}
+              {activeTab === 'clients' && <Clients onAdd={() => openModal('client', false)} isDarkMode={isDarkMode} />}
+              {activeTab === 'settings' && <SettingsScreen user={user} onUpdate={refreshData} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -1460,6 +1458,7 @@ export default function App() {
         onSave={refreshData}
         initialType={modalType}
         showTabs={modalShowTabs}
+        isDarkMode={isDarkMode}
       />
     </div>
   );
