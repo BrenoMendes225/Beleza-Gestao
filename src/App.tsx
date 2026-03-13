@@ -1339,7 +1339,7 @@ const Agenda = ({ user, isDarkMode, refreshKey, onEdit, onStatusUpdate }: { user
     if (!phone) { alert('Telefone da cliente não encontrado.'); return; }
     const dateFormatted = apt.date ? new Date(apt.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }) : apt.date;
     const msg = encodeURIComponent(
-      `Olá ${apt.client_name}! 🌸\n\nPassando para lembrar do seu agendamento:\n\n📋 *Serviço:* ${apt.service_name}\n📅 *Data:* ${dateFormatted}\n⏰ *Horário:* ${apt.time}\n💳 *Pagamento:* ${apt.payment_method || 'A combinar'}\n\nTe esperamos! Qualquer dúvida, é só chamar. 💕`
+      `Olá, ${apt.client_name}! 💖\n\nEstou passando para confirmar o seu agendamento. Seguem os detalhes do seu atendimento:\n\n✨ Serviço: ${apt.service_name}\n📅 Data: ${dateFormatted}\n⏰ Horário: ${apt.time}\n💳 Forma de pagamento: ${apt.payment_method || 'A combinar'}\n\nQualquer imprevisto ou necessidade de alteração, é só avisar.\nSerá um prazer atender você! 💇‍♀️`
     );
     window.open(`https://wa.me/55${phone}?text=${msg}`, '_blank');
   };
