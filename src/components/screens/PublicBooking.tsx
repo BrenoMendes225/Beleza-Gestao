@@ -131,13 +131,18 @@ const PublicBooking: React.FC = () => {
       if (existingClient) {
         clientId = existingClient.id;
       } else {
+        const params = new URLSearchParams(window.location.search);
+        const ownerId = params.get('s');
+
         const { data: newClient, error: clientErr } = await supabase
           .from('clients')
           .insert({ 
+            user_id: ownerId, // Associar ao dono do salão
             name: clientInfo.name, 
             phone: clientInfo.phone, 
             email: clientInfo.email,
-            status: 'active'
+            status: 'active',
+            is_vip: false
           })
           .select()
           .single();
