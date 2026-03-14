@@ -70,6 +70,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');

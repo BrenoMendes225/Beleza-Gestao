@@ -2,6 +2,9 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import Database from "better-sqlite3";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const db = new Database("salon.db");
 
