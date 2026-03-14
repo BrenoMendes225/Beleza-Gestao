@@ -35,6 +35,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
 }) => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(localStorage.getItem('biometric_enabled') === 'true');
+
+  const toggleBiometric = () => {
+    const newValue = !biometricEnabled;
+    setBiometricEnabled(newValue);
+    localStorage.setItem('biometric_enabled', String(newValue));
+  };
 
   useEffect(() => {
     supabase.from('profiles').select('*').eq('id', user.id).single()
@@ -89,8 +96,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
       title: 'App',
       items: [
         { id: 'theme', label: 'Modo Escuro', value: isDarkMode ? 'Ativado' : 'Desativado', icon: isDarkMode ? Moon : Sun, action: toggleDarkMode },
+        { id: 'biometric', label: 'Face ID / Biometria', value: biometricEnabled ? 'Ativado' : 'Desativado', icon: Shield, action: toggleBiometric },
         { id: 'notifs', label: 'Notificações', value: 'Ativado', icon: Bell },
-        { id: 'security', label: 'Segurança', value: 'Privacidade', icon: Shield },
       ]
     }
   ];
