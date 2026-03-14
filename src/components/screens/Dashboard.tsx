@@ -85,33 +85,46 @@ const Dashboard: React.FC<DashboardProps> = ({
         })));
       }
 
-      // Fetch Weekly Performance Data
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-      const startDate = sevenDaysAgo.toISOString().split('T')[0];
+      // Fetch Weekly Performance Data (Last 7 days)
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      const startDateStr = startDate.toISOString().split('T')[0];
 
+      // Fetch completed appointments for revenue
       const { data: weeklyApts } = await supabase
         .from('appointments')
         .select('date, service:service_id(price)')
         .eq('status', 'completed')
-        .gte('date', startDate);
+        .gte('date', startDateStr);
+      
+      // Fetch expenses for the same period
+      const { data: weeklyExpenses } = await supabase
+        .from('expenses')
+        .select('date, amount')
+        .gte('date', startDateStr);
       
       const chartValues = Array(7).fill(0);
       const daysAbbr = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
       const chartLabels: string[] = [];
 
       for (let i = 0; i < 7; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + i);
         const dStr = d.toISOString().split('T')[0];
         chartLabels.push(daysAbbr[d.getDay()]);
         
-        const dayTotal = weeklyApts?.filter(a => a.date === dStr)
+        const dayRevenue = weeklyApts?.filter(a => a.date === dStr)
           .reduce((sum, a: any) => sum + (a.service?.price || 0), 0) || 0;
-        chartValues[i] = dayTotal;
+        
+        const dayExpense = weeklyExpenses?.filter(e => e.date === dStr)
+          .reduce((sum, e) => sum + e.amount, 0) || 0;
+        
+        // Net Profit for the day
+        chartValues[i] = dayRevenue - dayExpense;
       }
       
-      const maxVal = Math.max(...chartValues, 1);
+      const maxVal = Math.max(...chartValues.map(Math.abs), 1);
       setChartData({
         labels: chartLabels,
         values: chartValues.map(v => (v / maxVal) * 100),
@@ -211,13 +224,13 @@ const Dashboard: React.FC<DashboardProps> = ({
             {chartData.values.map((height, i) => (
               <div key={i} className="flex flex-col items-center gap-2 flex-1 group/bar relative">
                 <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
-                  R$ {chartData.rawValues[i].toFixed(0)}
+                  R$ {chartData.rawValues[i].toFixed(2)}
                 </div>
                 <motion.div 
                   initial={{ height: 0 }}
-                  animate={{ height: `${Math.max(height, 5)}%` }}
+                  animate={{ height: `${Math.max(Math.abs(height), 5)}%` }}
                   transition={{ duration: 0.8, delay: i * 0.1 }}
-                  className={`w-full max-w-[12px] rounded-t-full ${height > 0 ? 'bg-primary' : 'bg-slate-100 dark:bg-background-dark'}`} 
+                  className={`w-full max-w-[12px] rounded-t-full ${chartData.rawValues[i] > 0 ? 'bg-primary' : chartData.rawValues[i] < 0 ? 'bg-rose-500' : 'bg-slate-100 dark:bg-background-dark'}`} 
                 ></motion.div>
                 <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
                   {chartData.labels[i]}
