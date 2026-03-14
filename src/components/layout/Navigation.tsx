@@ -14,7 +14,6 @@ import {
 interface NavigationProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onNewRecord: () => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
 }
@@ -22,7 +21,6 @@ interface NavigationProps {
 const Navigation: React.FC<NavigationProps> = ({ 
   activeTab, 
   setActiveTab, 
-  onNewRecord,
   isDarkMode,
   toggleDarkMode 
 }) => {
@@ -40,7 +38,7 @@ const Navigation: React.FC<NavigationProps> = ({
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-border-dark px-2 pb-6 pt-3 flex items-center z-50 transition-colors">
         <div className="flex-1 flex justify-around">
-          {tabs.slice(0, 3).map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -50,31 +48,6 @@ const Navigation: React.FC<NavigationProps> = ({
               <span className="text-[9px] font-bold uppercase tracking-tighter opacity-80">{tab.label}</span>
             </button>
           ))}
-        </div>
-        
-        {/* Placeholder for the FAB */}
-        <div className="w-16 h-10 flex-shrink-0"></div>
-
-        <div className="flex-1 flex justify-around">
-          {tabs.slice(3).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
-            >
-              <tab.icon size={20} fill={activeTab === tab.id ? 'currentColor' : 'none'} />
-              <span className="text-[9px] font-bold uppercase tracking-tighter opacity-80">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50">
-          <button 
-            onClick={onNewRecord}
-            className="bg-primary text-white h-14 w-14 rounded-full flex items-center justify-center shadow-lg shadow-primary/40 hover:scale-105 transition-transform"
-          >
-            <Plus size={32} />
-          </button>
         </div>
       </nav>
 
@@ -106,14 +79,7 @@ const Navigation: React.FC<NavigationProps> = ({
           ))}
         </div>
 
-        <div className="p-6 border-t border-slate-100 dark:border-border-dark">
-          <button 
-            onClick={onNewRecord}
-            className="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
-          >
-            <Plus size={20} /> Novo Registro
-          </button>
-        </div>
+
       </nav>
     </>
   );

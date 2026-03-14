@@ -201,13 +201,6 @@ function App() {
         <Navigation 
           activeTab={activeTab} 
           setActiveTab={setActiveTab} 
-          onNewRecord={() => {
-            setEditingAppointment(null);
-            setEditingService(null);
-            setNewRecordInitialType('appointment');
-            setNewRecordShowTabs(true);
-            setIsNewRecordOpen(true);
-          }}
           isDarkMode={isDarkMode}
           toggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />
