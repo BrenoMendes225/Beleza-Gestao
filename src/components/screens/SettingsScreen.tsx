@@ -83,13 +83,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
+  const bookingLink = `${window.location.origin}/booking?s=${user.id}`;
+  const copyBookingLink = () => {
+    navigator.clipboard.writeText(bookingLink);
+    alert('Link de agendamento copiado!');
+  };
+
   const menuGroups = [
     {
       title: 'Negócio',
       items: [
         { id: 'salon', label: 'Nome do Salão', value: profile?.salon_name || salonName, icon: MapPin },
         { id: 'hours', label: 'Horário de Funcionamento', value: 'Ver detalhes', icon: Clock },
-        { id: 'bookings', label: 'Link de Agendamento', value: 'booking.com/meu-salao', icon: Share2 },
+        { id: 'bookings', label: 'Link de Agendamento', value: 'Clique para copiar', icon: Share2, action: copyBookingLink },
       ]
     },
     {

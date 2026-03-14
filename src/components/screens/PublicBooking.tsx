@@ -43,13 +43,35 @@ const PublicBooking: React.FC = () => {
   });
 
   useEffect(() => {
-    supabase.from('services').select('*').then(({ data }) => setServices(data || []));
-    
-    // Simular info do salão (poderia vir de uma tabela business_settings)
-    supabase.from('profiles').select('salon_name').limit(1).single()
-      .then(({ data }) => {
-        if (data?.salon_name) setSalonInfo({ ...salonInfo, name: data.salon_name });
-      });
+    const params = new URLSearchParams(window.location.search);
+    const ownerId = params.get('s');
+
+    if (ownerId) {
+      // Fetch Salon Profile
+      supabase.from('profiles')
+        .select('*')
+        .eq('id', ownerId)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setSalonInfo({
+              name: data.salon_name || "Glow Studio",
+              address: data.address || "Endereço não informado",
+              rating: 4.9,
+              reviews: 128
+            });
+          }
+        });
+
+      // Fetch Services for this salon
+      supabase.from('services')
+        .select('*')
+        .eq('user_id', ownerId)
+        .then(({ data }) => setServices(data || []));
+    } else {
+      // Fallback for demo or invalid link
+      supabase.from('services').select('*').limit(10).then(({ data }) => setServices(data || []));
+    }
   }, []);
 
   useEffect(() => {
@@ -87,7 +109,11 @@ const PublicBooking: React.FC = () => {
       }
 
       // 2. Criar agendamento
+      const params = new URLSearchParams(window.location.search);
+      const ownerId = params.get('s');
+
       const { error } = await supabase.from('appointments').insert({
+        user_id: ownerId, // Associar ao dono do salão
         client_id: clientId,
         service_id: selectedService?.id,
         date: selectedDate,
