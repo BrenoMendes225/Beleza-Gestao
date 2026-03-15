@@ -30,6 +30,7 @@ const Clients: React.FC<ClientsProps> = ({ onAdd, onEdit, refreshKey }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [clientHistory, setClientHistory] = useState<Appointment[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -74,11 +75,15 @@ const Clients: React.FC<ClientsProps> = ({ onAdd, onEdit, refreshKey }) => {
     fetchClients();
   }, [refreshKey]);
 
-  const deleteClient = async (id: string, name: string) => {
-    if (!confirm(`Tem certeza que deseja excluir a cliente "${name}"? Esta ação não pode ser desfeita.`)) return;
+  const deleteClient = (client: Client) => {
+    setClientToDelete(client);
+  };
+
+  const confirmDelete = async () => {
+    if (!clientToDelete) return;
     
     setLoading(true);
-    const { error } = await supabase.from('clients').delete().eq('id', id);
+    const { error } = await supabase.from('clients').delete().eq('id', clientToDelete.id);
     
     if (error) {
       if (error.code === '23503') {
@@ -89,6 +94,7 @@ const Clients: React.FC<ClientsProps> = ({ onAdd, onEdit, refreshKey }) => {
     } else {
       fetchClients();
     }
+    setClientToDelete(null);
     setLoading(false);
   };
 
@@ -201,7 +207,7 @@ const Clients: React.FC<ClientsProps> = ({ onAdd, onEdit, refreshKey }) => {
                     Ver Histórico
                   </button>
                   <button 
-                    onClick={() => deleteClient(client.id, client.name)}
+                    onClick={() => deleteClient(client)}
                     className="h-10 w-10 flex items-center justify-center bg-rose-50 dark:bg-rose-500/10 text-rose-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-xl transition-all"
                   >
                     <Trash2 size={16} />
@@ -305,6 +311,57 @@ const Clients: React.FC<ClientsProps> = ({ onAdd, onEdit, refreshKey }) => {
                   className="w-full h-14 bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 font-black rounded-2xl border border-slate-200 dark:border-border-dark shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all uppercase tracking-widest text-sm"
                 >
                   Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {clientToDelete && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setClientToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden p-8 text-center"
+            >
+              <div className="size-20 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={40} />
+              </div>
+              
+              <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Excluir Cliente?</h3>
+              <p className="text-sm font-bold text-slate-500 mb-8">
+                Tem certeza que deseja excluir a cliente <span className="text-slate-900 dark:text-white font-black">"{clientToDelete.name}"</span>? Esta ação não pode ser desfeita.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={confirmDelete}
+                  disabled={loading}
+                  className="w-full h-14 bg-rose-500 text-white font-black rounded-2xl shadow-lg shadow-rose-500/20 hover:bg-rose-600 transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <div className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>Sim, Excluir</>
+                  )}
+                </button>
+                <button 
+                  onClick={() => setClientToDelete(null)}
+                  disabled={loading}
+                  className="w-full h-14 bg-slate-50 dark:bg-background-dark text-slate-500 dark:text-slate-400 font-black rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all uppercase tracking-widest text-sm"
+                >
+                  Não, Cancelar
                 </button>
               </div>
             </motion.div>

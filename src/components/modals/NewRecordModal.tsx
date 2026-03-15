@@ -14,7 +14,7 @@ import { User } from '@supabase/supabase-js';
 const maskPhone = (value: string) => {
   if (!value) return "";
   value = value.replace(/\D/g, "");
-  value = value.replace(/^(\d{2})(\d)/g, "$1 $2");
+  value = value.replace(/^(\d{2})(\d)/g, "($1) $2");
   value = value.replace(/(\d{5})(\d)/, "$1-$2");
   return value.slice(0, 15);
 };
@@ -342,7 +342,7 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
                   <div className="relative">
                     <Phone size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input 
-                      placeholder="31 98546-0918" 
+                      placeholder="(00) 00000-0000" 
                       value={newClient.phone}
                       onChange={e => setNewClient({...newClient, phone: maskPhone(e.target.value)})}
                       className="w-full h-14 pl-12 pr-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
